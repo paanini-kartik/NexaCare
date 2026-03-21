@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -26,6 +27,11 @@ export default function AuthPage() {
   return (
     <section className="auth-page">
       <div className="auth-panel card-surface">
+        <div className="auth-top-row">
+          <Link className="ghost-btn" to="/landing">
+            Back to NexaCare overview
+          </Link>
+        </div>
         <div className="auth-header">
           <span className="status-dot" />
           <p>Secure Dummy Environment (No backend connected)</p>
@@ -33,7 +39,7 @@ export default function AuthPage() {
         <h1>{isSignup ? "Create account" : "Log in"}</h1>
         <p>Professional mock flow for UX/testing. Firebase Auth integration is intentionally not enabled yet.</p>
 
-        <form onSubmit={onSubmit}>
+        <form className="auth-form" onSubmit={onSubmit}>
           {isSignup ? (
             <label className="form-field">
               Full name
@@ -76,11 +82,14 @@ export default function AuthPage() {
           <button className="primary-btn pulse-glow" type="submit">
             {isSignup ? "Create account" : "Log in"}
           </button>
-        </form>
 
-        <button className="ghost-btn" type="button" onClick={() => setIsSignup((s) => !s)}>
-          {isSignup ? "Already have an account? Log in" : "Need an account? Sign up"}
-        </button>
+          <div className="auth-switch-row">
+            <span>{isSignup ? "Already have an account?" : "Need an account?"}</span>
+            <button className="ghost-btn" type="button" onClick={() => setIsSignup((s) => !s)}>
+              {isSignup ? "Log in" : "Sign up"}
+            </button>
+          </div>
+        </form>
       </div>
     </section>
   );
