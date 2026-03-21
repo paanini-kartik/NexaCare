@@ -1,3 +1,5 @@
+import firebase
+
 from fastapi import FastAPI
 from routes import users, appointments, clinics, benefits
 
