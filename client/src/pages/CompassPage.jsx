@@ -1,4 +1,6 @@
+import { useState, useMemo } from "react";
 import HealthCompass from "../components/HealthCompass/HealthCompass";
+import { clinicLocations } from "../data/mockData";
 
 export default function CompassPage() {
   return (
