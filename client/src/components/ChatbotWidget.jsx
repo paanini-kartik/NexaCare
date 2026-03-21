@@ -30,7 +30,7 @@ export default function ChatbotWidget() {
       <button className="chat-fab" type="button" aria-label="Open assistant">
         <MessageCircle size={22} />
       </button>
-      <div className="chat-panel card-surface">
+      <div className="chat-panel contained chat-panel-inner">
         <div className="chat-panel-head">
           <strong>AI Assistant</strong>
         </div>

@@ -53,8 +53,8 @@ export default function Layout() {
         </button>
       </aside>
 
-      <div className="content-wrap">
-        <header className="sticky-header card-surface">
+      <div className="content-wrap vibe-canvas">
+        <header className="sticky-header">
           <div className="search-pill">
             <Search size={16} />
             <input placeholder="Search appointments, clinics, support" />
