@@ -79,8 +79,31 @@ export default function HealthCompass() {
   const [loadMessage, setLoadMessage] = useState("");
   const [clinicDetails, setClinicDetails] = useState(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationError, setLocationError] = useState(null);
 
   useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser.");
+      setUserLocation({ lat: 43.6532, lng: -79.3832 });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+      },
+      (error) => {
+        console.warn("Geolocation error:", error);
+        setLocationError("Please enable location services or using default location.");
+        setUserLocation({ lat: 43.6532, lng: -79.3832 }); // fallback
+      },
+      { timeout: 10000 }
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!userLocation) return;
     let isCancelled = false;
 
     async function loadClinics() {
@@ -89,7 +112,7 @@ export default function HealthCompass() {
 
       try {
         const apiType = activeFilter === "vision" ? "optometry" : activeFilter;
-        const response = await fetch(`/api/clinics/?lat=43.6532&lng=-79.3832&type=${apiType}`);
+        const response = await fetch(`/api/clinics/?lat=${userLocation.lat}&lng=${userLocation.lng}&type=${apiType}`);
         if (!response.ok) {
           throw new Error(`Clinics API returned ${response.status}`);
         }
@@ -128,7 +151,7 @@ export default function HealthCompass() {
     return () => {
       isCancelled = true;
     };
-  }, [activeFilter]);
+  }, [activeFilter, userLocation]);
 
   const normalizedClinics = useMemo(
     () =>
@@ -219,17 +242,26 @@ export default function HealthCompass() {
         <section className="card-surface health-compass-map">
           <h3>Health Compass Map</h3>
           <p>Tap a pin to view details and sync with the clinic panel.</p>
-          {isLoading ? <p>Loading clinics...</p> : <p>{loadMessage}</p>}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {isLoading ? <p>Loading clinics...</p> : <p>{loadMessage}</p>}
+            {locationError && <p style={{ color: "#ef4444", fontSize: "0.85rem", margin: 0 }}>📍 {locationError}</p>}
+          </div>
+          
           <div className="map-frame-wrap health-compass-map-live">
-            <MapContainer center={[43.6532, -79.3832]} zoom={13} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapViewportController clinics={filteredClinics} selectedClinic={selectedClinic} />
-              
-              <Marker position={[43.6532, -79.3832]} icon={userIcon}>
-                <Popup>
+            {!userLocation ? (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", background: "#f1f5f9", borderRadius: "12px" }}>
+                <p style={{ color: "#64748b", fontWeight: "500" }}>Finding your location...</p>
+              </div>
+            ) : (
+              <MapContainer center={[userLocation.lat, userLocation.lng]} zoom={13} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapViewportController clinics={filteredClinics} selectedClinic={selectedClinic} />
+                
+                <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
+                  <Popup>
                   <strong>You are here</strong>
                 </Popup>
               </Marker>
@@ -262,6 +294,7 @@ export default function HealthCompass() {
                 );
               })}
             </MapContainer>
+            )}
           </div>
 
           {selectedClinic ? (
