@@ -1,46 +1,227 @@
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 const MOCK_USER = {
-  name: "Alex Chen",
+  name: "Nicolas Miranda Cantanhede",
   age: 34,
   occupation: "Software Developer",
-  benefits: {
-    dental: { total: 1500, used: 400 },
-    vision: { total: 600, used: 0 },
-    physio: { total: 900, used: 200 },
-  },
+  location: { lat: 43.6532, lng: -79.3832, city: "Toronto" },
 };
 
-function buildSystemPrompt(user) {
-  const { name, age, occupation, benefits } = user;
-  return `You are a personal health assistant for ${name}, a ${age}-year-old ${occupation}.
+const TOOLS = [
+  {
+    name: "get_user_profile",
+    description: "Get the current user's profile information",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_benefits",
+    description: "Get the user's dental, vision, and physio benefit balances",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_appointments",
+    description: "Get all upcoming and past appointments",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "book_appointment",
+    description: "Book a new appointment and add it to the dashboard",
+    input_schema: {
+      type: "object",
+      required: ["type", "clinicName", "date", "duration"],
+      properties: {
+        type:       { type: "string", description: "e.g. Annual Dental Checkup" },
+        clinicName: { type: "string", description: "Name of the clinic" },
+        date:       { type: "string", description: "ISO 8601 date string" },
+        duration:   { type: "number", description: "Duration in minutes" },
+      },
+    },
+  },
+  {
+    name: "find_clinics",
+    description: "Find nearby clinics filtered by type",
+    input_schema: {
+      type: "object",
+      properties: {
+        type: {
+          type: "string",
+          enum: ["dental", "optometry", "hospital", "pharmacy"],
+          description: "Type of clinic",
+        },
+      },
+    },
+  },
+  {
+    name: "update_benefit_usage",
+    description: "Record an expense against a benefit balance",
+    input_schema: {
+      type: "object",
+      required: ["benefitType", "amount"],
+      properties: {
+        benefitType: { type: "string", enum: ["dental", "vision", "physio"] },
+        amount:      { type: "number", description: "Amount in dollars" },
+      },
+    },
+  },
+  {
+    name: "show_notification",
+    description: "Show a toast notification on the dashboard",
+    input_schema: {
+      type: "object",
+      required: ["message", "type"],
+      properties: {
+        message: { type: "string" },
+        type:    { type: "string", enum: ["info", "warning", "success"] },
+      },
+    },
+  },
+];
 
-Their current benefits:
+function buildSystemPrompt(user, benefits, appointments) {
+  const upcoming = appointments.filter((a) => a.status === "upcoming");
+  const past = appointments.filter((a) => a.status === "past");
+  return `You are a personal health assistant for ${user.name}, a ${user.age}-year-old ${user.occupation} based in ${user.location.city}.
+
+Current benefits:
 - Dental: $${benefits.dental.used} used of $${benefits.dental.total} ($${benefits.dental.total - benefits.dental.used} remaining)
 - Vision: $${benefits.vision.used} used of $${benefits.vision.total} ($${benefits.vision.total - benefits.vision.used} remaining)
 - Physiotherapy: $${benefits.physio.used} used of $${benefits.physio.total} ($${benefits.physio.total - benefits.physio.used} remaining)
 
+Upcoming appointments: ${upcoming.length ? upcoming.map((a) => `${a.type} at ${a.clinicName} on ${a.date}`).join(", ") : "none"}
+Past appointments: ${past.length ? past.map((a) => `${a.type} at ${a.clinicName} on ${a.date}`).join(", ") : "none"}
+
+You have tools to read data, book appointments, update benefit usage, and show notifications. Use them proactively when the user asks to do something. When you book an appointment, also call update_benefit_usage with a reasonable estimated cost and show_notification to confirm.
+
 Rules:
-- Answer health and scheduling questions clearly and concisely
-- Proactively mention when the user is overdue for a checkup
+- Be friendly, direct, not clinical
+- Keep answers 2–4 sentences unless acting on something
 - Reference specific benefit balances when relevant
-- Keep answers to 2–4 sentences unless asked for more
-- Tone: friendly, direct, not clinical`;
+- Proactively mention overdue checkups`;
 }
 
-export default function ChatbotWidget() {
+export default function ChatbotWidget({
+  appointments: propAppointments,
+  benefits: propBenefits,
+  clinics: propClinics,
+  onBookAppointment,
+  onUpdateBenefit,
+  onShowNotification,
+}) {
+  const appointments = propAppointments ?? [
+    { id: "apt_01", type: "Annual Dental Checkup",  clinicName: "Smile Dental Studio",    date: "2026-04-02T10:00:00Z", duration: 60,  status: "upcoming" },
+    { id: "apt_02", type: "Physiotherapy Session",  clinicName: "ActiveCare Physio",       date: "2026-04-10T14:30:00Z", duration: 45,  status: "upcoming" },
+    { id: "apt_04", type: "Vision Test",            clinicName: "ClearView Optometry",     date: "2025-12-15T11:00:00Z", duration: 45,  status: "past"     },
+    { id: "apt_05", type: "Dental Cleaning",        clinicName: "Smile Dental Studio",     date: "2025-10-03T10:00:00Z", duration: 45,  status: "past"     },
+  ];
+
+  const [benefits, setBenefits] = useState(propBenefits ?? {
+    dental: { total: 1500, used: 400 },
+    vision: { total: 600,  used: 0   },
+    physio: { total: 900,  used: 200 },
+  });
+
+  const clinics = propClinics ?? [
+    { id: "c_01", name: "Smile Dental Studio",   type: "dental",    lat: 43.6545, lng: -79.3801 },
+    { id: "c_02", name: "ClearView Optometry",   type: "optometry", lat: 43.6510, lng: -79.3850 },
+    { id: "c_03", name: "ActiveCare Physio",     type: "hospital",  lat: 43.6580, lng: -79.3900 },
+    { id: "c_04", name: "Rexall Pharmacy",       type: "pharmacy",  lat: 43.6490, lng: -79.3820 },
+    { id: "c_05", name: "Toronto General Hosp.", type: "hospital",  lat: 43.6590, lng: -79.3870 },
+  ];
+
   const [messages, setMessages] = useState([
-    { from: "bot", text: "Hi, I am your NexaCare assistant. How can I help you today?" },
+    { from: "bot", text: `Hi Nicolas! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?` },
   ]);
   const [history, setHistory] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
   const bottomRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages]);
+  }, [messages, open]);
+
+  function executeTool(name, input) {
+    switch (name) {
+      case "get_user_profile":
+        return JSON.stringify(MOCK_USER);
+
+      case "get_benefits":
+        return JSON.stringify(benefits);
+
+      case "get_appointments":
+        return JSON.stringify(appointments);
+
+      case "find_clinics":
+        return JSON.stringify(
+          input.type ? clinics.filter((c) => c.type === input.type) : clinics
+        );
+
+      case "book_appointment": {
+        const newAppt = {
+          id: `apt_${Date.now()}`,
+          type: input.type,
+          clinicName: input.clinicName,
+          date: input.date,
+          duration: input.duration,
+          status: "upcoming",
+        };
+        if (onBookAppointment) onBookAppointment(newAppt);
+        return JSON.stringify({ success: true, appointment: newAppt });
+      }
+
+      case "update_benefit_usage": {
+        const { benefitType, amount } = input;
+        setBenefits((prev) => {
+          const updated = {
+            ...prev,
+            [benefitType]: {
+              ...prev[benefitType],
+              used: Math.min(prev[benefitType].used + amount, prev[benefitType].total),
+            },
+          };
+          if (onUpdateBenefit) onUpdateBenefit(benefitType, amount);
+          return updated;
+        });
+        return JSON.stringify({ success: true });
+      }
+
+      case "show_notification": {
+        if (onShowNotification) onShowNotification(input.message, input.type);
+        setMessages((prev) => [
+          ...prev,
+          { from: "bot", text: `✅ ${input.message}`, isNotification: true },
+        ]);
+        return JSON.stringify({ success: true });
+      }
+
+      default:
+        return JSON.stringify({ error: "Unknown tool" });
+    }
+  }
+
+  async function callAPI(messages) {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1024,
+        system: buildSystemPrompt(MOCK_USER, benefits, appointments),
+        tools: TOOLS,
+        messages,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message ?? `Error ${response.status}`);
+    return data;
+  }
 
   const send = async (e) => {
     e.preventDefault();
@@ -49,37 +230,38 @@ export default function ChatbotWidget() {
     const userText = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { from: "user", text: userText }]);
-
-    const newHistory = [...history, { role: "user", content: userText }];
-    setHistory(newHistory);
     setLoading(true);
 
+    let currentHistory = [...history, { role: "user", content: userText }];
+
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 512,
-          system: buildSystemPrompt(MOCK_USER),
-          messages: newHistory,
-        }),
-      });
+      let data = await callAPI(currentHistory);
 
-      const data = await response.json();
-      if (!response.ok) {
-        console.error("Anthropic API error:", data);
-        setMessages((prev) => [...prev, { from: "bot", text: `Error ${response.status}: ${data.error?.message ?? "Unknown error"}` }]);
-        return;
+      // Agentic tool loop — keep going until Claude gives a text reply
+      while (data.stop_reason === "tool_use") {
+        const toolUseBlocks = data.content.filter((b) => b.type === "tool_use");
+
+        // Append Claude's tool_use turn to history
+        currentHistory = [...currentHistory, { role: "assistant", content: data.content }];
+
+        // Execute each tool and build tool_result blocks
+        const toolResults = toolUseBlocks.map((block) => ({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: executeTool(block.name, block.input),
+        }));
+
+        // Append tool results as user turn
+        currentHistory = [...currentHistory, { role: "user", content: toolResults }];
+
+        // Call API again
+        data = await callAPI(currentHistory);
       }
-      const reply = data.content?.[0]?.text ?? "Sorry, I couldn't get a response.";
 
-      setHistory((prev) => [...prev, { role: "assistant", content: reply }]);
+      // Final text reply
+      const reply = data.content.find((b) => b.type === "text")?.text ?? "Done!";
+      currentHistory = [...currentHistory, { role: "assistant", content: reply }];
+      setHistory(currentHistory);
       setMessages((prev) => [...prev, { from: "bot", text: reply }]);
     } catch (err) {
       console.error("Chat error:", err);
@@ -91,40 +273,46 @@ export default function ChatbotWidget() {
 
   return (
     <div className="chatbot-mini">
-      <button className="chat-fab" type="button" aria-label="Open assistant">
-        <MessageCircle size={22} strokeWidth={2} />
+      <button
+        className="chat-fab"
+        type="button"
+        aria-label="Open assistant"
+        onClick={() => setOpen((o) => !o)}
+      >
+        {open ? <X size={22} strokeWidth={2} /> : <MessageCircle size={22} strokeWidth={2} />}
       </button>
-      <div className="chat-panel" role="dialog" aria-label="AI Assistant">
-        <div className="chat-panel-card">
-          <header className="chat-panel-head">
-            <strong>AI Assistant</strong>
-            <span className="chat-panel-badge">NexaCare</span>
-          </header>
-          <div className="chat-log">
-            {messages.map((m, idx) => (
-              <div key={`${m.from}-${idx}`} className={`chat-message chat-message--${m.from}`}>
-                {m.text}
-              </div>
-            ))}
-            {loading && (
-              <div className="chat-message chat-message--bot">Thinking…</div>
-            )}
-            <div ref={bottomRef} />
+
+      {open && (
+        <div className="chat-panel" role="dialog" aria-label="AI Assistant">
+          <div className="chat-panel-card">
+            <header className="chat-panel-head">
+              <strong>AI Assistant</strong>
+              <span className="chat-panel-badge">NexaCare</span>
+            </header>
+            <div className="chat-log">
+              {messages.map((m, idx) => (
+                <div key={`${m.from}-${idx}`} className={`chat-message chat-message--${m.from}`}>
+                  {m.text}
+                </div>
+              ))}
+              {loading && <div className="chat-message chat-message--bot">Thinking…</div>}
+              <div ref={bottomRef} />
+            </div>
+            <form onSubmit={send} className="chat-form">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask a question"
+                aria-label="Message"
+                disabled={loading}
+              />
+              <button className="chat-send-btn" type="submit" disabled={loading}>
+                Send
+              </button>
+            </form>
           </div>
-          <form onSubmit={send} className="chat-form">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask a question"
-              aria-label="Message"
-              disabled={loading}
-            />
-            <button className="chat-send-btn" type="submit" disabled={loading}>
-              Send
-            </button>
-          </form>
         </div>
-      </div>
+      )}
     </div>
   );
 }

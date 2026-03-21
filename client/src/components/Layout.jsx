@@ -1,5 +1,5 @@
 import { Bell, Search, Settings } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import ChatbotWidget from "./ChatbotWidget";
@@ -19,6 +19,8 @@ const navItems = [
 export default function Layout() {
   const navigate = useNavigate();
   const { user, enterprises, logout, showOnboardingOverlay } = useAuth();
+  const [appointments, setAppointments] = useState([]);
+  const [notification, setNotification] = useState(null);
 
   const workOrgLabel = useMemo(() => {
     if (!user?.enterpriseId || !user?.employeeRoleTemplateId) return null;
@@ -29,6 +31,14 @@ export default function Layout() {
     () => navItems.filter((item) => !item.employerOnly || user?.accountType === "employer"),
     [user?.accountType]
   );
+  const handleBookAppointment = useCallback((appt) => {
+    setAppointments((prev) => [...prev, appt]);
+  }, []);
+
+  const handleShowNotification = useCallback((message, type) => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  }, []);
 
   const onLogout = () => {
     logout();
@@ -109,7 +119,16 @@ export default function Layout() {
         </main>
       </div>
 
-      <ChatbotWidget />
+      <ChatbotWidget
+        appointments={appointments}
+        onBookAppointment={handleBookAppointment}
+        onShowNotification={handleShowNotification}
+      />
+      {notification && (
+        <div className={`agent-toast agent-toast--${notification.type}`} role="alert">
+          {notification.message}
+        </div>
+      )}
       {showOnboardingOverlay ? <OnboardingOverlay /> : null}
     </div>
   );

@@ -2,6 +2,9 @@ import firebase
 
 from fastapi import FastAPI
 from routes import users, appointments, clinics, benefits, auth, health
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
