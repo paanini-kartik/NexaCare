@@ -1409,6 +1409,76 @@ a { text-decoration: none; color: inherit; }
   letter-spacing: -0.02em;
   color: var(--title);
 }
+.settings-family-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 0.75rem 0 1rem;
+}
+.settings-nested {
+  padding: 1rem 1.1rem;
+  margin: 0;
+}
+.settings-mini-title {
+  font-size: 0.95rem;
+  margin: 0 0 0.35rem;
+  color: var(--title);
+}
+.settings-family-board {
+  margin: 1rem 0;
+}
+.settings-member-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.settings-member-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  font-size: 0.9rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.settings-member-role {
+  text-transform: capitalize;
+  color: var(--primary);
+  font-weight: 600;
+}
+.settings-role-select {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.settings-key-list {
+  margin-top: 0.75rem;
+}
+.settings-key-items {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+.settings-key-items li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+.settings-key-meta {
+  font-size: 0.8rem;
+  color: var(--body);
+}
+.settings-key-code {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 
 .landing-brand,
 .landing-actions {

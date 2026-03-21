@@ -10,7 +10,7 @@ const navItems = [
   { to: "/health-profile", label: "Health Profile", enabled: true },
   { to: "/health-compass", label: "Health Compass", enabled: true },
   { to: "/benefits", label: "Benefits", enabled: true },
-  { to: "/employer", label: "Employer Hub", enabled: true },
+  { to: "/employer", label: "Employer Hub", enabled: true, employerOnly: true },
   { to: "/settings", label: "Settings", enabled: true },
   { to: "/emergency", label: "Emergency", enabled: true },
   { to: "/soon", label: "Labs (Soon)", enabled: false },
@@ -24,6 +24,11 @@ export default function Layout() {
     if (!user?.enterpriseId || !user?.employeeRoleTemplateId) return null;
     return enterprises.find((e) => e.id === user.enterpriseId)?.name || "Work";
   }, [user?.enterpriseId, user?.employeeRoleTemplateId, enterprises]);
+
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => !item.employerOnly || user?.accountType === "employer"),
+    [user?.accountType]
+  );
 
   const onLogout = () => {
     logout();
@@ -42,7 +47,7 @@ export default function Layout() {
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map((item) =>
+          {visibleNavItems.map((item) =>
             item.enabled ? (
               <NavLink key={item.to} to={item.to} className="nav-item">
                 {item.label}
