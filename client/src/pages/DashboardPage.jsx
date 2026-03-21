@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import CheckupDashboardSection from "../components/CheckupDashboardSection";
-import { healthNews, insurers, onboardingSteps, quickActions } from "../data/mockData";
+import { useAuth } from "../contexts/AuthContext";
+import { healthNews, onboardingSteps, quickActions } from "../data/mockData";
 
 const iconMap = {
   calendar: CalendarCheck,
@@ -19,11 +20,8 @@ const iconMap = {
 const actionTones = ["mint", "sky", "amber", "violet"];
 
 function BenefitsSummaryCard() {
-  const flat = insurers.flatMap((i) => i.categories);
-  const totalLimit = flat.reduce((sum, c) => sum + c.annualLimit, 0);
-  const totalUsed = flat.reduce((sum, c) => sum + c.used, 0);
-  const remaining = totalLimit - totalUsed;
-  const avgCoverage = Math.round((flat.reduce((sum, c) => sum + c.coverage, 0) / flat.length) * 100);
+  const { benefitDashboardSummary, benefitContextDescription } = useAuth();
+  const { remaining, avgCoverage } = benefitDashboardSummary;
 
   return (
     <section className="wallet-card dashboard-benefits-hero" aria-label="Benefits summary">
@@ -33,6 +31,9 @@ function BenefitsSummaryCard() {
         <span>Average coverage {avgCoverage}%</span>
         <span>Remaining across plans ${remaining.toLocaleString()}</span>
       </div>
+      {benefitContextDescription ? (
+        <p className="wallet-footnote">{benefitContextDescription}</p>
+      ) : null}
     </section>
   );
 }

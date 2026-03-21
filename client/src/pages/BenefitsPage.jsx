@@ -1,11 +1,20 @@
-import { insurers } from "../data/mockData";
+import { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 
 function currency(amount) {
   return `$${amount.toLocaleString()}`;
 }
 
 export default function BenefitsPage() {
-  const allCategories = insurers.flatMap((insurer) =>
+  const { user, enterprises, effectiveInsurers, benefitContextDescription } = useAuth();
+
+  const workEmployerName = useMemo(() => {
+    if (!user?.enterpriseId || !user?.employeeRoleTemplateId) return null;
+    return enterprises.find((e) => e.id === user.enterpriseId)?.name ?? null;
+  }, [user?.enterpriseId, user?.employeeRoleTemplateId, enterprises]);
+
+  const allCategories = effectiveInsurers.flatMap((insurer) =>
     insurer.categories.map((c) => ({ ...c, provider: insurer.provider, plan: insurer.plan }))
   );
 
@@ -32,9 +41,37 @@ export default function BenefitsPage() {
         <h1>Benefits</h1>
         <p>
           Your plans, rolled into one readable view. The table below is intentionally contained—numbers need a grid.
-          Everything else stays in the open so you can scan like a human, not a spreadsheet.
+          {benefitContextDescription ? (
+            <>
+              {" "}
+              <strong>Active source:</strong> {benefitContextDescription}.
+            </>
+          ) : null}{" "}
+          Manage family role, work assignment, and household links in <Link to="/settings">Settings</Link>—family and
+          work can both apply.
         </p>
       </header>
+
+      {user?.accountType !== "employer" ? (
+        <section className="contained">
+          <h2 className="page-section-title">Roles &amp; connections</h2>
+          <p className="page-section-lead">
+            Family role: <strong>{user?.familyRole || "—"}</strong>
+            {workEmployerName ? (
+              <>
+                {" "}
+                · Work benefits: <strong>{workEmployerName}</strong>
+              </>
+            ) : (
+              <>
+                {" "}
+                · Work benefits: <em>not linked</em>
+              </>
+            )}
+            . Open <Link to="/settings">Settings</Link> to adjust family role, work org, or household connections.
+          </p>
+        </section>
+      ) : null}
 
       <section className="page-section">
         <h2 className="title-vibe">Synthesized across carriers</h2>
@@ -75,7 +112,7 @@ export default function BenefitsPage() {
         <h2 className="title-vibe">By provider</h2>
         <p className="page-section-lead">Each block is a light frame around dense benefit rows—not a wall of identical cards.</p>
         <div className="provider-stack">
-          {insurers.map((insurer) => (
+          {effectiveInsurers.map((insurer) => (
             <article key={insurer.id} className="provider-block contained">
               <header className="provider-block-head">
                 <strong>{insurer.provider}</strong>
@@ -83,7 +120,8 @@ export default function BenefitsPage() {
               </header>
               {insurer.categories.map((category) => {
                 const remaining = category.annualLimit - category.used;
-                const pct = Math.max(0, Math.min(100, Math.round((remaining / category.annualLimit) * 100)));
+                const denom = category.annualLimit || 1;
+                const pct = Math.max(0, Math.min(100, Math.round((remaining / denom) * 100)));
                 return (
                   <div key={category.name} className="benefit-row">
                     <div className="benefit-top">
