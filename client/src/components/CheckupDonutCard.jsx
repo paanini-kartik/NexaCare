@@ -69,7 +69,7 @@ export default function CheckupDonutCard({ cardKey, policyLine, serviceTitle, in
               r={R}
               fill="none"
               strokeWidth={STROKE}
-              strokeLinecap="round"
+              strokeLinecap="butt"
               transform={`rotate(-90 ${CX} ${CY})`}
               strokeDasharray={`${arcLength} ${C}`}
             />
