@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, useState } from "react";
-import { CORE_CHECKUP_KEYS, DEFAULT_CHECKUP_SCHEDULE } from "../data/checkupConfig";
+import { CORE_CHECKUP_KEYS } from "../data/checkupConfig";
 
 const USER_KEY = "nexacare:user";
 const PROFILE_KEY = "nexacare:profile";
@@ -17,18 +17,25 @@ function readStorage(key, fallback) {
   }
 }
 
+function migrateCoreRow(row) {
+  if (!row || typeof row !== "object") return { lastVisitISO: null };
+  if (row.lastVisitISO && typeof row.lastVisitISO === "string") {
+    return { lastVisitISO: row.lastVisitISO.slice(0, 10) };
+  }
+  if (typeof row.daysSinceLastVisit === "number" && !Number.isNaN(row.daysSinceLastVisit)) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - row.daysSinceLastVisit);
+    return { lastVisitISO: d.toISOString().slice(0, 10) };
+  }
+  return { lastVisitISO: null };
+}
+
 function normalizeCheckupSchedule(raw) {
-  const next = { ...DEFAULT_CHECKUP_SCHEDULE };
-  if (raw && typeof raw === "object") {
-    for (const key of CORE_CHECKUP_KEYS) {
-      const row = raw[key];
-      if (row && typeof row === "object") {
-        next[key] = {
-          intervalDays: Math.max(1, Number(row.intervalDays) || DEFAULT_CHECKUP_SCHEDULE[key].intervalDays),
-          daysSinceLastVisit: Math.max(0, Number(row.daysSinceLastVisit) || 0),
-        };
-      }
-    }
+  const next = {};
+  for (const key of CORE_CHECKUP_KEYS) {
+    const row = raw && typeof raw === "object" ? raw[key] : null;
+    next[key] = migrateCoreRow(row);
   }
   return next;
 }
@@ -37,12 +44,25 @@ function normalizeExtraCareServices(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((x) => x && String(x.name || "").trim())
-    .map((x, i) => ({
-      id: typeof x.id === "string" && x.id ? x.id : `extra-${i}-${String(x.name).trim().slice(0, 24)}`,
-      name: String(x.name).trim(),
-      intervalDays: Math.max(1, Number(x.intervalDays) || 90),
-      daysSinceLastVisit: Math.max(0, Number(x.daysSinceLastVisit) || 0),
-    }));
+    .map((x, i) => {
+      const name = String(x.name).trim();
+      let lastVisitISO = null;
+      if (x.lastVisitISO && typeof x.lastVisitISO === "string") {
+        lastVisitISO = x.lastVisitISO.slice(0, 10);
+      } else if (typeof x.daysSinceLastVisit === "number" && !Number.isNaN(x.daysSinceLastVisit)) {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() - x.daysSinceLastVisit);
+        lastVisitISO = d.toISOString().slice(0, 10);
+      }
+      const kind = x.kind === "preset" || x.kind === "other" ? x.kind : "other";
+      return {
+        id: typeof x.id === "string" && x.id ? x.id : `extra-${i}-${name.slice(0, 24)}`,
+        name,
+        kind,
+        lastVisitISO,
+      };
+    });
 }
 
 function normalizeProfile(rawProfile) {

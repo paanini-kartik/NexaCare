@@ -1,6 +1,12 @@
 import { useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { CHECKUP_TYPE_META, CORE_CHECKUP_KEYS, extraServicePolicyLine } from "../data/checkupConfig";
+import {
+  effectiveDaysSinceForCore,
+  effectiveDaysSinceForExtra,
+  getCoreIntervalDays,
+  getExtraIntervalDays,
+} from "../lib/cadence";
 import CheckupDonutCard from "./CheckupDonutCard";
 
 const EXTRA_ACCENTS = ["mint", "amber", "violet", "sky"];
@@ -8,34 +14,42 @@ const EXTRA_ACCENTS = ["mint", "amber", "violet", "sky"];
 export default function CheckupDashboardSection() {
   const { healthProfile } = useAuth();
   const { checkupSchedule, extraCareServices } = healthProfile;
+  const { age, occupation, medicalHistory } = healthProfile;
 
   const coreItems = useMemo(
     () =>
       CORE_CHECKUP_KEYS.map((key) => {
         const meta = CHECKUP_TYPE_META[key];
         const row = checkupSchedule[key];
+        const intervalDays = getCoreIntervalDays(age, occupation, medicalHistory, key);
+        const daysSinceLastVisit = effectiveDaysSinceForCore(row?.lastVisitISO, intervalDays);
+        const policyLine = `Recommended every ${intervalDays} days from your profile (age, occupation, history). The ring tracks time since your last logged visit.`;
         return {
           key,
-          policyLine: meta.policyLine,
+          policyLine,
           serviceTitle: meta.serviceTitle,
-          intervalDays: row.intervalDays,
-          daysSinceLastVisit: row.daysSinceLastVisit,
+          intervalDays,
+          daysSinceLastVisit,
           accent: meta.accent,
         };
       }),
-    [checkupSchedule]
+    [checkupSchedule, age, occupation, medicalHistory]
   );
 
   const extraItems = useMemo(
     () =>
-      (extraCareServices || []).map((svc, i) => ({
-        key: svc.id,
-        policyLine: extraServicePolicyLine(svc.name),
-        serviceTitle: svc.name,
-        intervalDays: svc.intervalDays,
-        daysSinceLastVisit: svc.daysSinceLastVisit,
-        accent: EXTRA_ACCENTS[i % EXTRA_ACCENTS.length],
-      })),
+      (extraCareServices || []).map((svc, i) => {
+        const intervalDays = getExtraIntervalDays(svc.name);
+        const daysSinceLastVisit = effectiveDaysSinceForExtra(svc.lastVisitISO, intervalDays);
+        return {
+          key: svc.id,
+          policyLine: extraServicePolicyLine(svc.name, intervalDays),
+          serviceTitle: svc.name,
+          intervalDays,
+          daysSinceLastVisit,
+          accent: EXTRA_ACCENTS[i % EXTRA_ACCENTS.length],
+        };
+      }),
     [extraCareServices]
   );
 
@@ -46,8 +60,8 @@ export default function CheckupDashboardSection() {
           Care windows
         </h2>
         <p className="checkup-dashboard-lead">
-          Rings show time left in each window—full after a visit, empty when it’s time to book. Edit intervals and extras in{" "}
-          <strong>Health profile</strong>.
+          Intervals for physical, dental, and eye care follow your profile. Log last visits on{" "}
+          <strong>Health profile</strong>; optional services use preset cadences.
         </p>
       </header>
       <div className="checkup-dashboard-grid">
