@@ -1659,6 +1659,46 @@ th { color: #334155; font-family: "General Sans", Inter, sans-serif; }
 .pill.ok { background: #ecfdf5; color: var(--primary); }
 .pill.plain { background: #f1f5f9; color: #475569; }
 
+.health-compass-root { display: grid; gap: 1rem; }
+.health-compass-toolbar { display: grid; gap: 0.75rem; }
+.health-compass-search {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  outline: none;
+  background: #fff;
+}
+.health-compass-filters { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.compass-filter-btn {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+.compass-filter-btn.active {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: var(--primary);
+}
+.health-compass-layout { display: grid; gap: 1rem; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.health-compass-map, .health-compass-side { padding: 1rem; }
+.health-compass-map-live { min-height: 460px; }
+.leaflet-container { font-family: "Satoshi", Inter, sans-serif; }
+.health-compass-selected {
+  margin-top: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 0.8rem;
+  background: #f8fafc;
+}
+.list-card.selected {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
 .clean-list { margin: 0; padding-left: 1rem; display: grid; gap: 0.45rem; color: #334155; }
 .button-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.75rem; }
 .section-card > .primary-btn,
@@ -1879,6 +1919,7 @@ th { color: #334155; font-family: "General Sans", Inter, sans-serif; }
   .profile-columns { grid-template-columns: 1fr; }
   .chatbot-mini { right: 1rem; bottom: 1rem; }
   .chat-panel { width: min(320px, calc(100vw - 2rem)); height: 460px; }
+  .health-compass-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
