@@ -1,0 +1,292 @@
+import { Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
+
+function recommendationFromProfile(age, occupation, medicalHistory = []) {
+  const parsedAge = Number(age || 0);
+  const demandingJobs = ["nurse", "construction", "warehouse", "athlete", "firefighter"];
+  const historyBlob = medicalHistory
+    .map((event) => `${event.title || ""} ${event.notes || ""}`.toLowerCase())
+    .join(" ");
+
+  return [
+    { label: "Dental checkup", cadence: parsedAge > 50 ? "Every 4 months" : "Every 6 months" },
+    {
+      label: "Optometry check",
+      cadence: historyBlob.includes("diabetes") || parsedAge > 40 ? "Every 12 months" : "Every 24 months",
+    },
+    {
+      label: "Physical exam",
+      cadence: demandingJobs.some((job) => (occupation || "").toLowerCase().includes(job))
+        ? "Every 6 months"
+        : "Every 12 months",
+    },
+  ];
+}
+
+export default function HealthProfilePage() {
+  const { healthProfile, updateProfile } = useAuth();
+  const recs = recommendationFromProfile(
+    healthProfile.age,
+    healthProfile.occupation,
+    healthProfile.medicalHistory
+  );
+  const onChange = (field) => (e) => updateProfile({ [field]: e.target.value });
+
+  const [newHistory, setNewHistory] = useState({ title: "", notes: "", date: "" });
+  const [newAllergy, setNewAllergy] = useState({ name: "", severity: "Low" });
+  const [newClinic, setNewClinic] = useState({ name: "", type: "Clinic" });
+
+  const sortedHistory = useMemo(() => {
+    return [...(healthProfile.medicalHistory || [])].sort((a, b) => {
+      const aDate = a.date ? new Date(a.date).getTime() : 0;
+      const bDate = b.date ? new Date(b.date).getTime() : 0;
+      return bDate - aDate;
+    });
+  }, [healthProfile.medicalHistory]);
+
+  const addHistoryEvent = () => {
+    if (!newHistory.title.trim() || !newHistory.date) return;
+    const next = [
+      ...(healthProfile.medicalHistory || []),
+      {
+        id: crypto.randomUUID(),
+        title: newHistory.title.trim(),
+        notes: newHistory.notes.trim(),
+        date: newHistory.date,
+      },
+    ];
+    updateProfile({ medicalHistory: next });
+    setNewHistory({ title: "", notes: "", date: "" });
+  };
+
+  const addAllergy = () => {
+    if (!newAllergy.name.trim()) return;
+    const next = [
+      ...(healthProfile.allergies || []),
+      { id: crypto.randomUUID(), name: newAllergy.name.trim(), severity: newAllergy.severity },
+    ];
+    updateProfile({ allergies: next });
+    setNewAllergy({ name: "", severity: "Low" });
+  };
+
+  const addClinic = () => {
+    if (!newClinic.name.trim()) return;
+    const next = [
+      ...(healthProfile.favoriteClinics || []),
+      { id: crypto.randomUUID(), name: newClinic.name.trim(), type: newClinic.type },
+    ];
+    updateProfile({ favoriteClinics: next });
+    setNewClinic({ name: "", type: "Clinic" });
+  };
+
+  return (
+    <div className="two-col-grid">
+      <section className="card-surface section-card">
+        <h2>Secure Health Profile</h2>
+        <p>Fill all required fields for accurate preventive reminders and matching.</p>
+
+        <div className="form-grid">
+          <label className="form-field">
+            Age
+            <input type="number" min="0" value={healthProfile.age} onChange={onChange("age")} />
+          </label>
+          <label className="form-field">
+            Occupation
+            <input
+              value={healthProfile.occupation}
+              onChange={onChange("occupation")}
+              placeholder="e.g. Teacher"
+            />
+          </label>
+          <label className="form-field">
+            Calendar provider
+            <select value={healthProfile.calendarProvider} onChange={onChange("calendarProvider")}>
+              <option>Google</option>
+              <option>Outlook</option>
+              <option>Apple</option>
+            </select>
+          </label>
+        </div>
+
+        <article className="dynamic-section">
+          <h3>Medical History</h3>
+          <div className="form-grid">
+            <label className="form-field">
+              Event date
+              <input
+                type="date"
+                value={newHistory.date}
+                onChange={(e) => setNewHistory((prev) => ({ ...prev, date: e.target.value }))}
+              />
+            </label>
+            <label className="form-field">
+              Event title
+              <input
+                value={newHistory.title}
+                onChange={(e) => setNewHistory((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="e.g. Asthma diagnosis"
+              />
+            </label>
+            <label className="form-field full">
+              Notes
+              <textarea
+                rows="2"
+                value={newHistory.notes}
+                onChange={(e) => setNewHistory((prev) => ({ ...prev, notes: e.target.value }))}
+                placeholder="Optional details"
+              />
+            </label>
+          </div>
+          <div className="button-row">
+            <button className="primary-btn" type="button" onClick={addHistoryEvent}>
+              Add medical event
+            </button>
+          </div>
+
+          <div className="list-stack">
+            {sortedHistory.map((event) => (
+              <details key={event.id} className="list-card details-card">
+                <summary>
+                  <div>
+                    <strong>{event.title}</strong>
+                    <p>{event.date}</p>
+                  </div>
+                </summary>
+                <p>{event.notes || "No extra notes provided."}</p>
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() =>
+                    updateProfile({
+                      medicalHistory: (healthProfile.medicalHistory || []).filter((item) => item.id !== event.id),
+                    })
+                  }
+                >
+                  <Trash2 size={14} /> Remove
+                </button>
+              </details>
+            ))}
+          </div>
+        </article>
+
+        <article className="dynamic-section">
+          <h3>Allergies</h3>
+          <div className="form-grid">
+            <label className="form-field">
+              Allergy name
+              <input
+                value={newAllergy.name}
+                onChange={(e) => setNewAllergy((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g. Penicillin"
+              />
+            </label>
+            <label className="form-field">
+              Severity
+              <select
+                value={newAllergy.severity}
+                onChange={(e) => setNewAllergy((prev) => ({ ...prev, severity: e.target.value }))}
+              >
+                <option>Low</option>
+                <option>Moderate</option>
+                <option>High</option>
+              </select>
+            </label>
+          </div>
+          <div className="button-row">
+            <button className="primary-btn" type="button" onClick={addAllergy}>
+              Add allergy
+            </button>
+          </div>
+          <div className="list-stack">
+            {(healthProfile.allergies || []).map((item) => (
+              <article key={item.id} className="list-card">
+                <div>
+                  <strong>{item.name}</strong>
+                  <p>{item.severity} severity</p>
+                </div>
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() =>
+                    updateProfile({
+                      allergies: (healthProfile.allergies || []).filter((allergy) => allergy.id !== item.id),
+                    })
+                  }
+                >
+                  <Trash2 size={14} /> Remove
+                </button>
+              </article>
+            ))}
+          </div>
+        </article>
+
+        <article className="dynamic-section">
+          <h3>Favorite Clinics</h3>
+          <div className="form-grid">
+            <label className="form-field">
+              Clinic name
+              <input
+                value={newClinic.name}
+                onChange={(e) => setNewClinic((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g. Northside Dental"
+              />
+            </label>
+            <label className="form-field">
+              Type
+              <select
+                value={newClinic.type}
+                onChange={(e) => setNewClinic((prev) => ({ ...prev, type: e.target.value }))}
+              >
+                <option>Clinic</option>
+                <option>Hospital</option>
+                <option>Pharmacy</option>
+                <option>Specialist</option>
+              </select>
+            </label>
+          </div>
+          <div className="button-row">
+            <button className="primary-btn" type="button" onClick={addClinic}>
+              Add favorite clinic
+            </button>
+          </div>
+          <div className="list-stack">
+            {(healthProfile.favoriteClinics || []).map((item) => (
+              <article key={item.id} className="list-card">
+                <div>
+                  <strong>{item.name}</strong>
+                  <p>{item.type}</p>
+                </div>
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() =>
+                    updateProfile({
+                      favoriteClinics: (healthProfile.favoriteClinics || []).filter(
+                        (clinic) => clinic.id !== item.id
+                      ),
+                    })
+                  }
+                >
+                  <Trash2 size={14} /> Remove
+                </button>
+              </article>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="card-surface section-card">
+        <h2>Automatic Preventive Updates</h2>
+        <div className="recommend-grid">
+          {recs.map((rec) => (
+            <article key={rec.label} className="recommend-card">
+              <strong>{rec.label}</strong>
+              <p>{rec.cadence}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
