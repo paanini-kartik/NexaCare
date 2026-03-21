@@ -1,24 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from firebase import db
 
 router = APIRouter()
 
 @router.get("/{user_id}")
 def get_user(user_id: str):
-    return {
-        
-        # Placeholder user
-        
-        "id": user_id,
-        "name": "Alex",
-        "age": 34,
-        "occupation": "Software Developer",
-        "location": {
-            "lat": 43.6532,
-            "lng": -79.3832
-        },
-        "benefits": {
-            "dental": { "total": 1500, "used": 400 },
-            "vision": { "total": 600, "used": 0 },
-            "physio": { "total": 900, "used": 200 }
-        }
-    }
+    try:
+        doc = db.collection("users").document(user_id).get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = doc.to_dict()
+        user["id"] = user_id
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from firebase_admin import auth
+from firebase import db
 
 router = APIRouter()
 
@@ -23,6 +24,17 @@ def signup(data: SignUpRequest):
             password=data.password,
             display_name=data.name
         )
+        db.collection("users").document(user.uid).set({
+            "name": data.name,
+            "age": data.age,
+            "occupation": data.occupation,
+            "email": data.email,
+            "benefits": {
+                "dental": { "total": 1500, "used": 0 },
+                "vision": { "total": 600, "used": 0 },
+                "physio": { "total": 900, "used": 0 }
+            }
+        })
         return {
             "success": True,
             "uid": user.uid,
