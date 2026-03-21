@@ -25,7 +25,9 @@ export function resolveBenefitSources(user, household, enterprise) {
   if (household?.enterpriseId && household?.sharedBenefitRoleId) {
     push(household.enterpriseId, household.sharedBenefitRoleId, "household");
   }
-  if (user.enterpriseId && user.employeeRoleTemplateId) {
+  // Dependents only use family/owner-linked benefits — not personal work assignment
+  const isDependent = user.familyRole === "dependent";
+  if (!isDependent && user.enterpriseId && user.employeeRoleTemplateId) {
     push(user.enterpriseId, user.employeeRoleTemplateId, "work");
   }
 

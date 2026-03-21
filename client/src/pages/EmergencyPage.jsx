@@ -1,4 +1,8 @@
+import { useState } from "react";
+
 export default function EmergencyPage() {
+  const [demo911Hint, setDemo911Hint] = useState(false);
+
   const script = `Hello, this is an automated medical emergency message from NexaCare. The caller may be unable to speak.
 
 Location: [device location placeholder]
@@ -20,9 +24,25 @@ Please dispatch emergency services immediately.`;
           <a className="primary-btn" href="https://www.redcross.org/get-help.html" target="_blank" rel="noreferrer">
             Red Cross support
           </a>
-          <a className="secondary-btn" href="tel:911">
-            Call 911
-          </a>
+          <div className="emergency-911-wrap">
+            <button
+              type="button"
+              className="secondary-btn"
+              aria-disabled="true"
+              title="Demo build — dialing is disabled"
+              onClick={(e) => {
+                e.preventDefault();
+                setDemo911Hint(true);
+              }}
+            >
+              Call 911
+            </button>
+            {demo911Hint ? (
+              <p className="auth-hint" style={{ marginTop: "0.5rem", maxWidth: "28rem" }}>
+                Demo: emergency dialing is not connected. In a real emergency, call 911 from your phone.
+              </p>
+            ) : null}
+          </div>
         </div>
       </section>
 
