@@ -5,6 +5,9 @@ router = APIRouter()
 @router.get("/{user_id}")
 def get_user(user_id: str):
     return {
+        
+        # Placeholder user
+        
         "id": user_id,
         "name": "Alex",
         "age": 34,

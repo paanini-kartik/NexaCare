@@ -5,6 +5,9 @@ router = APIRouter()
 @router.get("/{user_id}")
 def get_appointments(user_id: str):
     return [
+        
+        # Placeholder appointments
+        
         {
             "id": "a1",
             "type": "Annual Dental Checkup",
