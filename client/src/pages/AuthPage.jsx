@@ -26,7 +26,7 @@ export default function AuthPage() {
 
   return (
     <section className="auth-page">
-      <div className="auth-panel card-surface">
+      <div className="auth-panel contained auth-contained">
         <div className="auth-top-row">
           <Link className="ghost-btn" to="/landing">
             Back to NexaCare overview

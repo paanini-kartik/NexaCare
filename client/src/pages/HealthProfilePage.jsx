@@ -1,6 +1,7 @@
 import { Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { CARE_SERVICE_PRESETS, CHECKUP_TYPE_META, CORE_CHECKUP_KEYS } from "../data/checkupConfig";
 
 function recommendationFromProfile(age, occupation, medicalHistory = []) {
   const parsedAge = Number(age || 0);
@@ -36,6 +37,65 @@ export default function HealthProfilePage() {
   const [newHistory, setNewHistory] = useState({ title: "", notes: "", date: "" });
   const [newAllergy, setNewAllergy] = useState({ name: "", severity: "Low" });
   const [newClinic, setNewClinic] = useState({ name: "", type: "Clinic" });
+  const [customCare, setCustomCare] = useState({ name: "", intervalDays: 30, daysSinceLastVisit: 0 });
+
+  const checkupSchedule = healthProfile.checkupSchedule;
+  const extraCareServices = healthProfile.extraCareServices || [];
+
+  const patchCheckupSchedule = (key, patch) => {
+    updateProfile({
+      checkupSchedule: {
+        ...checkupSchedule,
+        [key]: { ...checkupSchedule[key], ...patch },
+      },
+    });
+  };
+
+  const addPresetCare = (preset) => {
+    const n = preset.name.toLowerCase();
+    if (extraCareServices.some((e) => e.name.toLowerCase() === n)) return;
+    updateProfile({
+      extraCareServices: [
+        ...extraCareServices,
+        {
+          id: crypto.randomUUID(),
+          name: preset.name,
+          intervalDays: preset.intervalDays,
+          daysSinceLastVisit: preset.daysSinceLastVisit,
+        },
+      ],
+    });
+  };
+
+  const addCustomCare = () => {
+    const name = customCare.name.trim();
+    if (!name) return;
+    if (extraCareServices.some((e) => e.name.toLowerCase() === name.toLowerCase())) return;
+    updateProfile({
+      extraCareServices: [
+        ...extraCareServices,
+        {
+          id: crypto.randomUUID(),
+          name,
+          intervalDays: Math.max(1, Number(customCare.intervalDays) || 30),
+          daysSinceLastVisit: Math.max(0, Number(customCare.daysSinceLastVisit) || 0),
+        },
+      ],
+    });
+    setCustomCare({ name: "", intervalDays: 30, daysSinceLastVisit: 0 });
+  };
+
+  const updateExtraCare = (id, field, raw) => {
+    const val =
+      field === "intervalDays" ? Math.max(1, Number(raw) || 1) : Math.max(0, Number(raw) || 0);
+    updateProfile({
+      extraCareServices: extraCareServices.map((e) => (e.id === id ? { ...e, [field]: val } : e)),
+    });
+  };
+
+  const removeExtraCare = (id) => {
+    updateProfile({ extraCareServices: extraCareServices.filter((e) => e.id !== id) });
+  };
 
   const sortedHistory = useMemo(() => {
     return [...(healthProfile.medicalHistory || [])].sort((a, b) => {
@@ -81,10 +141,19 @@ export default function HealthProfilePage() {
   };
 
   return (
-    <div className="two-col-grid">
-      <section className="card-surface section-card">
-        <h2>Secure Health Profile</h2>
-        <p>Fill all required fields for accurate preventive reminders and matching.</p>
+    <div className="profile-page">
+      <header className="page-hero page-hero--alive">
+        <h1>Health profile</h1>
+        <p>
+          Your story belongs in structured fields below—medical events, allergies, and clinics need clear boundaries.
+          This intro stays in the open so the page breathes.
+        </p>
+      </header>
+
+      <div className="profile-columns">
+        <section className="contained profile-panel" aria-label="Your health data">
+          <h2 className="page-section-title">Your information</h2>
+          <p className="page-section-lead">Only what you choose to share. All stored locally for this demo.</p>
 
         <div className="form-grid">
           <label className="form-field">
@@ -274,19 +343,162 @@ export default function HealthProfilePage() {
             ))}
           </div>
         </article>
-      </section>
 
-      <section className="card-surface section-card">
-        <h2>Automatic Preventive Updates</h2>
-        <div className="recommend-grid">
-          {recs.map((rec) => (
-            <article key={rec.label} className="recommend-card">
-              <strong>{rec.label}</strong>
-              <p>{rec.cadence}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+        <article className="dynamic-section" aria-labelledby="care-track-heading">
+          <h3 id="care-track-heading">Care &amp; services you track</h3>
+          <p className="page-section-lead care-track-lead">
+            Physical, dental, and eye exams always appear on your dashboard. Add chiropractic, physio, yoga, or anything
+            else you want to count down—each extra gets its own ring.
+          </p>
+
+          <h4 className="care-subheading">Core checkups</h4>
+          <p className="care-hint">
+            <strong>Interval</strong> is how long each visit “counts” for. <strong>Days since last visit</strong> drives the
+            ring (0 = just went; equals interval = due).
+          </p>
+          <div className="care-core-grid">
+            {CORE_CHECKUP_KEYS.map((key) => {
+              const meta = CHECKUP_TYPE_META[key];
+              const row = checkupSchedule[key];
+              return (
+                <div key={key} className="care-core-card">
+                  <p className="care-core-name">{meta.serviceTitle}</p>
+                  <div className="form-grid care-core-fields">
+                    <label className="form-field">
+                      Interval (days)
+                      <input
+                        type="number"
+                        min={1}
+                        value={row.intervalDays}
+                        onChange={(e) =>
+                          patchCheckupSchedule(key, { intervalDays: Number(e.target.value) || 1 })
+                        }
+                      />
+                    </label>
+                    <label className="form-field">
+                      Days since last visit
+                      <input
+                        type="number"
+                        min={0}
+                        value={row.daysSinceLastVisit}
+                        onChange={(e) =>
+                          patchCheckupSchedule(key, { daysSinceLastVisit: Number(e.target.value) || 0 })
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <h4 className="care-subheading">Add wellness &amp; therapy</h4>
+          <p className="care-hint">Quick-add common services (tap again won’t duplicate the same name).</p>
+          <div className="care-preset-row">
+            {CARE_SERVICE_PRESETS.map((preset) => (
+              <button
+                key={preset.name}
+                type="button"
+                className="care-preset-chip"
+                onClick={() => addPresetCare(preset)}
+              >
+                + {preset.name}
+              </button>
+            ))}
+          </div>
+
+          <h4 className="care-subheading">Custom service</h4>
+          <div className="form-grid">
+            <label className="form-field">
+              Name
+              <input
+                value={customCare.name}
+                onChange={(e) => setCustomCare((p) => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Acupuncture, PT follow-up"
+              />
+            </label>
+            <label className="form-field">
+              Interval (days)
+              <input
+                type="number"
+                min={1}
+                value={customCare.intervalDays}
+                onChange={(e) => setCustomCare((p) => ({ ...p, intervalDays: e.target.value }))}
+              />
+            </label>
+            <label className="form-field">
+              Days since last visit
+              <input
+                type="number"
+                min={0}
+                value={customCare.daysSinceLastVisit}
+                onChange={(e) => setCustomCare((p) => ({ ...p, daysSinceLastVisit: e.target.value }))}
+              />
+            </label>
+          </div>
+          <div className="button-row">
+            <button className="primary-btn" type="button" onClick={addCustomCare}>
+              Add custom service
+            </button>
+          </div>
+
+          {extraCareServices.length > 0 && (
+            <>
+              <h4 className="care-subheading">Your extra services</h4>
+              <div className="list-stack">
+                {extraCareServices.map((svc) => (
+                  <article key={svc.id} className="list-card care-extra-card">
+                    <div className="care-extra-main">
+                      <strong>{svc.name}</strong>
+                      <div className="care-extra-fields">
+                        <label className="form-field">
+                          Interval (days)
+                          <input
+                            type="number"
+                            min={1}
+                            value={svc.intervalDays}
+                            onChange={(e) => updateExtraCare(svc.id, "intervalDays", e.target.value)}
+                          />
+                        </label>
+                        <label className="form-field">
+                          Days since
+                          <input
+                            type="number"
+                            min={0}
+                            value={svc.daysSinceLastVisit}
+                            onChange={(e) => updateExtraCare(svc.id, "daysSinceLastVisit", e.target.value)}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <button
+                      className="secondary-btn"
+                      type="button"
+                      onClick={() => removeExtraCare(svc.id)}
+                    >
+                      <Trash2 size={14} /> Remove
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
+        </article>
+        </section>
+
+        <aside className="profile-aside" aria-label="Preventive care suggestions">
+          <h2 className="page-section-title">Preventive cadence</h2>
+          <p className="page-section-lead">Guidance from your age, occupation, and history—no extra chrome.</p>
+          <ul className="recommend-open-list">
+            {recs.map((rec) => (
+              <li key={rec.label}>
+                <strong>{rec.label}</strong>
+                <span>{rec.cadence}</span>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      </div>
     </div>
   );
 }
