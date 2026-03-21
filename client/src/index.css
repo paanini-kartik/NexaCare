@@ -1287,6 +1287,129 @@ a { text-decoration: none; color: inherit; }
 .status-dot { width: 8px; height: 8px; border-radius: 0; background: var(--primary); }
 .auth-contained { border-radius: 0; padding: 1.75rem; }
 
+.tab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.2rem 0 0.35rem;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 0.15rem;
+}
+.tab-strip--page {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding-left: 0;
+  padding-right: 0;
+}
+.tab-strip-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--body);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.tab-strip-btn:hover {
+  color: var(--title);
+  background: rgba(5, 150, 105, 0.06);
+}
+.tab-strip-btn--active {
+  color: var(--primary);
+  border-color: var(--border);
+  background: var(--bg-elevated);
+}
+.auth-toggle-block {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid var(--border-soft);
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.92rem;
+  color: var(--title);
+  cursor: pointer;
+}
+.toggle-row input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary);
+}
+.auth-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--body);
+  max-width: 52ch;
+}
+.form-field-hint {
+  font-weight: 400;
+  color: var(--body);
+  font-size: 0.82rem;
+}
+
+.auth-employer-block {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.85rem 0 0.15rem;
+  border-top: 1px solid var(--border-soft);
+}
+.auth-employer-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--title);
+}
+.employer-yesno {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  max-width: 280px;
+}
+.employer-yesno-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--body);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.employer-yesno-btn:hover {
+  color: var(--title);
+  background: rgba(5, 150, 105, 0.06);
+}
+.employer-yesno-btn--active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(5, 150, 105, 0.1);
+}
+
+.settings-flow.page-flow {
+  gap: 1.5rem;
+}
+.settings-bar {
+  margin-bottom: 0.25rem;
+}
+.settings-section .settings-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  max-width: 40rem;
+}
+.settings-subhead {
+  font-size: 0.95rem;
+  margin: 1.25rem 0 0;
+  letter-spacing: -0.02em;
+  color: var(--title);
+}
+
 .landing-brand,
 .landing-actions {
   display: flex;
@@ -1348,6 +1471,13 @@ a { text-decoration: none; color: inherit; }
 .wallet-card p, .wallet-card h3, .wallet-card span { color: #e2e8f0; }
 .wallet-card h3 { font-size: clamp(2rem, 4vw, 2.75rem); margin: 0 0 0.75rem; color: #fff; letter-spacing: -0.03em; }
 .wallet-metrics { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; font-size: 0.88rem; opacity: 0.92; }
+.wallet-footnote {
+  margin: 0.85rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  opacity: 0.78;
+  max-width: 42ch;
+}
 
 .action-strip {
   display: flex;
@@ -1434,6 +1564,24 @@ a { text-decoration: none; color: inherit; }
 
 .employer-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 2.5rem; align-items: start; }
 .employer-form-panel .button-row { margin-top: 1rem; }
+.employer-roles-stack { display: flex; flex-direction: column; gap: 1.5rem; }
+.employer-role-head { margin-bottom: 0.35rem; }
+.employer-role-title { margin: 0; }
+.employer-preview-mini .title-vibe { font-size: 1.05rem; }
+.form-grid--inline {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+.table-input {
+  width: 100%;
+  min-width: 4rem;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+}
+.household-sync-form { margin-top: 0.5rem; }
 .checklist-open { margin: 0.5rem 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.85rem; }
 .checklist-open li {
   padding-left: 1.35rem;
