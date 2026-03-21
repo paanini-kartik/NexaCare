@@ -35,6 +35,12 @@ def signup(data: SignUpRequest):
                 "physio": { "total": 900, "used": 0 }
             }
         })
+        db.collection("health").document(user.uid).set({
+            "medicalHistory": [],
+            "allergies": [],
+            "favouriteClinics": [],
+            "calendarProvider": None
+        })
         return {
             "success": True,
             "uid": user.uid,
