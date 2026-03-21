@@ -9,16 +9,18 @@ import DashboardPage from "./pages/DashboardPage";
 import EmergencyPage from "./pages/EmergencyPage";
 import EmployerPage from "./pages/EmployerPage";
 import HealthProfilePage from "./pages/HealthProfilePage";
+import LandingPage from "./pages/LandingPage";
 
 function HomeRedirect() {
   const { isAuthenticated } = useAuth();
-  return <Navigate to={isAuthenticated ? "/dashboard" : "/auth"} replace />;
+  return <Navigate to={isAuthenticated ? "/dashboard" : "/landing"} replace />;
 }
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
+      <Route path="/landing" element={<LandingPage />} />
       <Route path="/auth" element={<AuthPage />} />
 
       <Route

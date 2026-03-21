@@ -16,18 +16,24 @@ function readStorage(key, fallback) {
   }
 }
 
+function normalizeProfile(rawProfile) {
+  const medicalHistory = Array.isArray(rawProfile?.medicalHistory) ? rawProfile.medicalHistory : [];
+  const allergies = Array.isArray(rawProfile?.allergies) ? rawProfile.allergies : [];
+  const favoriteClinics = Array.isArray(rawProfile?.favoriteClinics) ? rawProfile.favoriteClinics : [];
+
+  return {
+    age: rawProfile?.age || "",
+    occupation: rawProfile?.occupation || "",
+    calendarProvider: rawProfile?.calendarProvider || "Google",
+    medicalHistory,
+    allergies,
+    favoriteClinics,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readStorage(USER_KEY, null));
-  const [healthProfile, setHealthProfile] = useState(() =>
-    readStorage(PROFILE_KEY, {
-      age: "",
-      occupation: "",
-      medicalHistory: "",
-      preferredClinics: "",
-      allergies: "",
-      calendarProvider: "Google",
-    })
-  );
+  const [healthProfile, setHealthProfile] = useState(() => normalizeProfile(readStorage(PROFILE_KEY, {})));
   const [showOnboardingOverlay, setShowOnboardingOverlay] = useState(false);
 
   const login = (identity, options = { isSignup: false }) => {
@@ -63,7 +69,7 @@ export function AuthProvider({ children }) {
 
   const updateProfile = (updates) => {
     setHealthProfile((prev) => {
-      const next = { ...prev, ...updates };
+      const next = normalizeProfile({ ...prev, ...updates });
       localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
       return next;
     });
