@@ -47,8 +47,8 @@ export default function BenefitsPage() {
               <strong>Active source:</strong> {benefitContextDescription}.
             </>
           ) : null}{" "}
-          Manage family role, work assignment, and household links in <Link to="/settings">Settings</Link>—family and
-          work can both apply.
+          Benefit schedules come from <strong>employer keys</strong> and family context—configure keys in{" "}
+          <Link to="/settings">Settings</Link>.
         </p>
       </header>
 
@@ -68,7 +68,7 @@ export default function BenefitsPage() {
                 · Work benefits: <em>not linked</em>
               </>
             )}
-            . Open <Link to="/settings">Settings</Link> to adjust family role, work org, or household connections.
+            . Use <Link to="/settings">Settings</Link> for family keys and employer keys.
           </p>
         </section>
       ) : null}
