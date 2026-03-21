@@ -27,42 +27,57 @@ export default function BenefitsPage() {
   }));
 
   return (
-    <div className="grid-stack">
-      <section className="card-surface section-card">
-        <h2>Multi-Provider Benefits Overview</h2>
-        <p>Your benefits are synthesized across all connected insurance plans.</p>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Avg Coverage</th>
-                <th>Annual Limit</th>
-                <th>Used</th>
-                <th>Remaining</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summaryByCategory.map((row) => (
-                <tr key={row.name}>
-                  <td>{row.name}</td>
-                  <td>{row.avgCoverage}%</td>
-                  <td>{currency(row.limit)}</td>
-                  <td>{currency(row.used)}</td>
-                  <td>{currency(row.remaining)}</td>
+    <div className="page-flow">
+      <header className="page-hero page-hero--alive">
+        <h1>Benefits</h1>
+        <p>
+          Your plans, rolled into one readable view. The table below is intentionally contained—numbers need a grid.
+          Everything else stays in the open so you can scan like a human, not a spreadsheet.
+        </p>
+      </header>
+
+      <section className="page-section">
+        <h2 className="title-vibe">Synthesized across carriers</h2>
+        <p className="page-section-lead">
+          Dummy data stands in for multiple insurers; the same layout works when you wire real APIs.
+        </p>
+        <div className="contained">
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Avg coverage</th>
+                  <th>Annual limit</th>
+                  <th>Used</th>
+                  <th>Remaining</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {summaryByCategory.map((row) => (
+                  <tr key={row.name}>
+                    <td>{row.name}</td>
+                    <td>{row.avgCoverage}%</td>
+                    <td>{currency(row.limit)}</td>
+                    <td>{currency(row.used)}</td>
+                    <td>{currency(row.remaining)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
-      <section className="card-surface section-card">
-        <h3>Provider Breakdown</h3>
-        <div className="provider-grid">
+      <div className="page-divider" role="presentation" />
+
+      <section className="page-section">
+        <h2 className="title-vibe">By provider</h2>
+        <p className="page-section-lead">Each block is a light frame around dense benefit rows—not a wall of identical cards.</p>
+        <div className="provider-stack">
           {insurers.map((insurer) => (
-            <article key={insurer.id} className="provider-card">
-              <header>
+            <article key={insurer.id} className="provider-block contained">
+              <header className="provider-block-head">
                 <strong>{insurer.provider}</strong>
                 <span>{insurer.plan}</span>
               </header>
@@ -75,8 +90,12 @@ export default function BenefitsPage() {
                       <span>{category.name}</span>
                       <span>{Math.round(category.coverage * 100)}% coverage</span>
                     </div>
-                    <div className="progress-track"><div style={{ width: `${pct}%` }} /></div>
-                    <small>{currency(remaining)} remaining of {currency(category.annualLimit)}</small>
+                    <div className="progress-track">
+                      <div style={{ width: `${pct}%` }} />
+                    </div>
+                    <small>
+                      {currency(remaining)} remaining of {currency(category.annualLimit)}
+                    </small>
                   </div>
                 );
               })}

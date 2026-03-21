@@ -5,7 +5,7 @@ const stats = [
   { label: "Preventive care reminders delivered", value: "125K+" },
   { label: "Clinics and hospitals discoverable", value: "8,400+" },
   { label: "Average onboarding completion", value: "94%" },
-  { label: "Emergency support response readiness", value: "24/7" },
+  { label: "Emergency support readiness", value: "24/7" },
 ];
 
 const features = [
@@ -28,7 +28,7 @@ const features = [
 
 export default function LandingPage() {
   return (
-    <div className="landing-root">
+    <div className="landing-root landing-alive">
       <header className="landing-nav">
         <div className="landing-brand">
           <span className="brand-icon">N</span>
@@ -49,15 +49,15 @@ export default function LandingPage() {
       </header>
 
       <main className="landing-main">
-        <section className="landing-hero card-surface">
-          <div>
+        <section className="landing-hero">
+          <div className="landing-hero-copy">
             <span className="landing-kicker">
-              <Sparkles size={14} /> Healthcare Navigation, Simplified
+              <Sparkles size={14} /> Healthcare navigation, simplified
             </span>
             <h1>One modern portal for preventive care, benefits, and emergency readiness.</h1>
-            <p>
+            <p className="landing-lead">
               NexaCare helps individuals and employers coordinate checkups, understand coverage, and access urgent
-              support through one professional, easy-to-use experience.
+              support—without drowning you in boxes and widgets before you even sign in.
             </p>
             <div className="button-row">
               <Link className="primary-btn pulse-glow" to="/auth">
@@ -77,24 +77,29 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-stats">
-          {stats.map((item) => (
-            <article key={item.label} className="card-surface stat-card">
-              <strong>{item.value}</strong>
-              <p>{item.label}</p>
-            </article>
-          ))}
+        <section className="landing-stats-band" aria-label="Impact at a glance">
+          <div className="landing-stats-inner">
+            {stats.map((item) => (
+              <div key={item.label} className="stat-band-item">
+                <strong>{item.value}</strong>
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
         </section>
 
-        <section className="landing-features card-surface">
-          <h2>Why teams and families choose NexaCare</h2>
-          <div className="feature-grid">
+        <section className="landing-features-open landing-features-zigzag">
+          <h2 className="title-vibe title-vibe--lightbg">Why teams and families choose NexaCare</h2>
+          <p className="landing-features-intro">
+            We built the product around clarity first—then added structure only where data actually needs it.
+          </p>
+          <div className="feature-columns">
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
-                <article key={feature.title} className="feature-card">
-                  <span className="feature-icon">
-                    <Icon size={20} />
+                <article key={feature.title} className="feature-open">
+                  <span className="feature-icon-open">
+                    <Icon size={22} strokeWidth={1.75} />
                   </span>
                   <h3>{feature.title}</h3>
                   <p>{feature.body}</p>
