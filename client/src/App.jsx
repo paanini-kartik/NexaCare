@@ -10,6 +10,7 @@ import EmergencyPage from "./pages/EmergencyPage";
 import EmployerPage from "./pages/EmployerPage";
 import HealthProfilePage from "./pages/HealthProfilePage";
 import LandingPage from "./pages/LandingPage";
+import SettingsPage from "./pages/SettingsPage";
 
 function HomeRedirect() {
   const { isAuthenticated } = useAuth();
@@ -18,6 +19,7 @@ function HomeRedirect() {
 
 export default function App() {
   return (
+    <div className="app-viewport">
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/landing" element={<LandingPage />} />
@@ -36,10 +38,12 @@ export default function App() {
         <Route path="health-compass" element={<CompassPage />} />
         <Route path="benefits" element={<BenefitsPage />} />
         <Route path="employer" element={<EmployerPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="emergency" element={<EmergencyPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </div>
   );
 }

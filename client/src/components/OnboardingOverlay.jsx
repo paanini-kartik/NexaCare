@@ -11,7 +11,7 @@ export default function OnboardingOverlay() {
 
   return (
     <div className="overlay-root" role="dialog" aria-modal="true">
-      <section className="overlay-card card-surface">
+      <section className="overlay-card contained">
         <div className="overlay-head">
           <h2>
             <Rocket size={18} /> Quick Onboarding

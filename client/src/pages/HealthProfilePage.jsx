@@ -1,6 +1,10 @@
 import { Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { CARE_SERVICE_PRESETS, CHECKUP_TYPE_META, CORE_CHECKUP_KEYS } from "../data/checkupConfig";
+import { getCoreIntervalDays } from "../lib/cadence";
+
+const NO_EXTRAS = [];
 
 function recommendationFromProfile(age, occupation, medicalHistory = []) {
   const parsedAge = Number(age || 0);
@@ -36,6 +40,74 @@ export default function HealthProfilePage() {
   const [newHistory, setNewHistory] = useState({ title: "", notes: "", date: "" });
   const [newAllergy, setNewAllergy] = useState({ name: "", severity: "Low" });
   const [newClinic, setNewClinic] = useState({ name: "", type: "Clinic" });
+  const [otherCareName, setOtherCareName] = useState("");
+
+  const checkupSchedule = healthProfile.checkupSchedule;
+  const extraCareServices = healthProfile.extraCareServices ?? NO_EXTRAS;
+
+  const extraNamesLower = useMemo(
+    () => new Set(extraCareServices.map((e) => e.name.toLowerCase())),
+    [extraCareServices]
+  );
+
+  /** Preset chips only for services not already in your list (preset or custom name). */
+  const availablePresets = useMemo(
+    () => CARE_SERVICE_PRESETS.filter((p) => !extraNamesLower.has(p.name.toLowerCase())),
+    [extraNamesLower]
+  );
+
+  const setCoreLastVisit = (key, iso) => {
+    updateProfile({
+      checkupSchedule: {
+        ...checkupSchedule,
+        [key]: { lastVisitISO: iso || null },
+      },
+    });
+  };
+
+  const setExtraLastVisit = (id, iso) => {
+    updateProfile({
+      extraCareServices: extraCareServices.map((e) =>
+        e.id === id ? { ...e, lastVisitISO: iso || null } : e
+      ),
+    });
+  };
+
+  const addPresetCare = (preset) => {
+    const n = preset.name.toLowerCase();
+    if (extraCareServices.some((e) => e.name.toLowerCase() === n)) return;
+    updateProfile({
+      extraCareServices: [
+        ...extraCareServices,
+        { id: crypto.randomUUID(), name: preset.name, kind: "preset", lastVisitISO: null },
+      ],
+    });
+  };
+
+  const addOtherCare = () => {
+    const name = otherCareName.trim();
+    if (!name) return;
+    if (extraCareServices.some((e) => e.name.toLowerCase() === name.toLowerCase())) return;
+    updateProfile({
+      extraCareServices: [
+        ...extraCareServices,
+        { id: crypto.randomUUID(), name, kind: "other", lastVisitISO: null },
+      ],
+    });
+    setOtherCareName("");
+  };
+
+  const removeExtraCare = (id) => {
+    updateProfile({ extraCareServices: extraCareServices.filter((e) => e.id !== id) });
+  };
+
+  const intervalHints = useMemo(() => {
+    const { age, occupation, medicalHistory } = healthProfile;
+    return CORE_CHECKUP_KEYS.reduce((acc, key) => {
+      acc[key] = getCoreIntervalDays(age, occupation, medicalHistory, key);
+      return acc;
+    }, {});
+  }, [healthProfile]);
 
   const sortedHistory = useMemo(() => {
     return [...(healthProfile.medicalHistory || [])].sort((a, b) => {
@@ -81,37 +153,62 @@ export default function HealthProfilePage() {
   };
 
   return (
-    <div className="two-col-grid">
-      <section className="card-surface section-card">
-        <h2>Secure Health Profile</h2>
-        <p>Fill all required fields for accurate preventive reminders and matching.</p>
+    <div className="profile-page profile-page--tight">
+      <header className="page-hero page-hero--alive profile-hero-tight">
+        <h1>Health profile</h1>
+        <p>
+          Cadence for preventive care is inferred from what you enter below. Log last visits so dashboard rings stay
+          accurate—no manual interval fields.
+        </p>
+      </header>
 
-        <div className="form-grid">
-          <label className="form-field">
-            Age
-            <input type="number" min="0" value={healthProfile.age} onChange={onChange("age")} />
-          </label>
-          <label className="form-field">
-            Occupation
-            <input
-              value={healthProfile.occupation}
-              onChange={onChange("occupation")}
-              placeholder="e.g. Teacher"
-            />
-          </label>
-          <label className="form-field">
-            Calendar provider
-            <select value={healthProfile.calendarProvider} onChange={onChange("calendarProvider")}>
-              <option>Google</option>
-              <option>Outlook</option>
-              <option>Apple</option>
-            </select>
-          </label>
-        </div>
+      <section className="profile-cadence-first" aria-labelledby="cadence-heading">
+        <h2 id="cadence-heading" className="profile-block-title">
+          Your preventive cadence
+        </h2>
+        <p className="profile-cadence-sub">
+          Updates automatically when you change age, occupation, or medical history.
+        </p>
+        <ul className="recommend-open-list profile-cadence-list">
+          {recs.map((rec) => (
+            <li key={rec.label}>
+              <strong>{rec.label}</strong>
+              <span>{rec.cadence}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
-        <article className="dynamic-section">
-          <h3>Medical History</h3>
-          <div className="form-grid">
+      <div className="profile-flow">
+        <section className="profile-section">
+          <h2 className="profile-block-title">Your information</h2>
+          <div className="form-grid profile-form-tight">
+            <label className="form-field">
+              Age
+              <input type="number" min="0" value={healthProfile.age} onChange={onChange("age")} />
+            </label>
+            <label className="form-field">
+              Occupation
+              <input
+                value={healthProfile.occupation}
+                onChange={onChange("occupation")}
+                placeholder="e.g. Teacher"
+              />
+            </label>
+            <label className="form-field">
+              Calendar provider
+              <select value={healthProfile.calendarProvider} onChange={onChange("calendarProvider")}>
+                <option>Google</option>
+                <option>Outlook</option>
+                <option>Apple</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section className="profile-section">
+          <h3 className="profile-block-title profile-h3">Medical history</h3>
+          <div className="form-grid profile-form-tight">
             <label className="form-field">
               Event date
               <input
@@ -138,15 +235,14 @@ export default function HealthProfilePage() {
               />
             </label>
           </div>
-          <div className="button-row">
+          <div className="button-row profile-btn-row">
             <button className="primary-btn" type="button" onClick={addHistoryEvent}>
               Add medical event
             </button>
           </div>
-
-          <div className="list-stack">
+          <div className="list-stack profile-list-tight">
             {sortedHistory.map((event) => (
-              <details key={event.id} className="list-card details-card">
+              <details key={event.id} className="list-card details-card profile-list-flat">
                 <summary>
                   <div>
                     <strong>{event.title}</strong>
@@ -168,11 +264,11 @@ export default function HealthProfilePage() {
               </details>
             ))}
           </div>
-        </article>
+        </section>
 
-        <article className="dynamic-section">
-          <h3>Allergies</h3>
-          <div className="form-grid">
+        <section className="profile-section">
+          <h3 className="profile-block-title profile-h3">Allergies</h3>
+          <div className="form-grid profile-form-tight">
             <label className="form-field">
               Allergy name
               <input
@@ -193,14 +289,14 @@ export default function HealthProfilePage() {
               </select>
             </label>
           </div>
-          <div className="button-row">
+          <div className="button-row profile-btn-row">
             <button className="primary-btn" type="button" onClick={addAllergy}>
               Add allergy
             </button>
           </div>
-          <div className="list-stack">
+          <div className="list-stack profile-list-tight">
             {(healthProfile.allergies || []).map((item) => (
-              <article key={item.id} className="list-card">
+              <article key={item.id} className="list-card profile-list-flat">
                 <div>
                   <strong>{item.name}</strong>
                   <p>{item.severity} severity</p>
@@ -219,11 +315,11 @@ export default function HealthProfilePage() {
               </article>
             ))}
           </div>
-        </article>
+        </section>
 
-        <article className="dynamic-section">
-          <h3>Favorite Clinics</h3>
-          <div className="form-grid">
+        <section className="profile-section">
+          <h3 className="profile-block-title profile-h3">Favorite clinics</h3>
+          <div className="form-grid profile-form-tight">
             <label className="form-field">
               Clinic name
               <input
@@ -245,14 +341,14 @@ export default function HealthProfilePage() {
               </select>
             </label>
           </div>
-          <div className="button-row">
+          <div className="button-row profile-btn-row">
             <button className="primary-btn" type="button" onClick={addClinic}>
               Add favorite clinic
             </button>
           </div>
-          <div className="list-stack">
+          <div className="list-stack profile-list-tight">
             {(healthProfile.favoriteClinics || []).map((item) => (
-              <article key={item.id} className="list-card">
+              <article key={item.id} className="list-card profile-list-flat">
                 <div>
                   <strong>{item.name}</strong>
                   <p>{item.type}</p>
@@ -273,20 +369,105 @@ export default function HealthProfilePage() {
               </article>
             ))}
           </div>
-        </article>
-      </section>
+        </section>
 
-      <section className="card-surface section-card">
-        <h2>Automatic Preventive Updates</h2>
-        <div className="recommend-grid">
-          {recs.map((rec) => (
-            <article key={rec.label} className="recommend-card">
-              <strong>{rec.label}</strong>
-              <p>{rec.cadence}</p>
-            </article>
-          ))}
-        </div>
-      </section>
+        <section className="profile-section profile-section--wellness" aria-labelledby="wellness-heading">
+          <h3 id="wellness-heading" className="profile-block-title profile-h3">
+            Visits &amp; optional services
+          </h3>
+          <p className="profile-wellness-lead">
+            Core checkup timing is computed from your profile. Add chiropractic, physio, yoga, massage, or anything
+            else—then log a last visit so rings match reality.
+          </p>
+
+          <h4 className="profile-mini-heading">Core checkups — last visit</h4>
+          <div className="profile-core-rows">
+            {CORE_CHECKUP_KEYS.map((key) => {
+              const meta = CHECKUP_TYPE_META[key];
+              const row = checkupSchedule[key];
+              const days = intervalHints[key];
+              return (
+                <div key={key} className="profile-core-row">
+                  <div className="profile-core-main">
+                    <span className="profile-core-name">{meta.serviceTitle}</span>
+                    <span className="profile-core-hint">Recommended about every {days} days (from profile)</span>
+                  </div>
+                  <label className="form-field profile-core-date">
+                    Last visit
+                    <input
+                      type="date"
+                      value={row?.lastVisitISO || ""}
+                      onChange={(e) => setCoreLastVisit(key, e.target.value || null)}
+                    />
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+
+          {availablePresets.length > 0 && (
+            <>
+              <h4 className="profile-mini-heading">Add wellness &amp; therapy</h4>
+              <div className="care-preset-row profile-preset-tight">
+                {availablePresets.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    className="care-preset-chip"
+                    onClick={() => addPresetCare(preset)}
+                  >
+                    + {preset.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="profile-other-row">
+            <label className="form-field profile-other-input">
+              Other (custom)
+              <input
+                value={otherCareName}
+                onChange={(e) => setOtherCareName(e.target.value)}
+                placeholder="e.g. Acupuncture, nutrition coach"
+              />
+            </label>
+            <button className="secondary-btn profile-other-add" type="button" onClick={addOtherCare}>
+              Add
+            </button>
+          </div>
+
+          {extraCareServices.length > 0 && (
+            <>
+              <h4 className="profile-mini-heading">Your extra services</h4>
+              <ul className="profile-extra-list">
+                {extraCareServices.map((svc) => (
+                  <li key={svc.id} className="profile-extra-item">
+                    <div className="profile-extra-top">
+                      <strong>{svc.name}</strong>
+                      <button
+                        className="secondary-btn profile-extra-remove"
+                        type="button"
+                        onClick={() => removeExtraCare(svc.id)}
+                      >
+                        <Trash2 size={14} /> Remove
+                      </button>
+                    </div>
+                    <label className="form-field profile-extra-date">
+                      Last visit
+                      <input
+                        type="date"
+                        value={svc.lastVisitISO || ""}
+                        onChange={(e) => setExtraLastVisit(svc.id, e.target.value || null)}
+                      />
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

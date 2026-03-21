@@ -1,4 +1,5 @@
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, Settings } from "lucide-react";
+import { useMemo } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import ChatbotWidget from "./ChatbotWidget";
@@ -10,13 +11,19 @@ const navItems = [
   { to: "/health-compass", label: "Health Compass", enabled: true },
   { to: "/benefits", label: "Benefits", enabled: true },
   { to: "/employer", label: "Employer Hub", enabled: true },
+  { to: "/settings", label: "Settings", enabled: true },
   { to: "/emergency", label: "Emergency", enabled: true },
   { to: "/soon", label: "Labs (Soon)", enabled: false },
 ];
 
 export default function Layout() {
   const navigate = useNavigate();
-  const { user, logout, showOnboardingOverlay } = useAuth();
+  const { user, enterprises, logout, showOnboardingOverlay } = useAuth();
+
+  const workOrgLabel = useMemo(() => {
+    if (!user?.enterpriseId || !user?.employeeRoleTemplateId) return null;
+    return enterprises.find((e) => e.id === user.enterpriseId)?.name || "Work";
+  }, [user?.enterpriseId, user?.employeeRoleTemplateId, enterprises]);
 
   const onLogout = () => {
     logout();
@@ -53,13 +60,21 @@ export default function Layout() {
         </button>
       </aside>
 
-      <div className="content-wrap">
-        <header className="sticky-header card-surface">
+      <div className="content-wrap vibe-canvas">
+        <header className="sticky-header">
           <div className="search-pill">
             <Search size={16} />
             <input placeholder="Search appointments, clinics, support" />
           </div>
           <div className="header-right">
+            <button
+              className="icon-btn"
+              type="button"
+              aria-label="Settings"
+              onClick={() => navigate("/settings")}
+            >
+              <Settings size={16} />
+            </button>
             <button className="icon-btn" type="button" aria-label="Notifications">
               <Bell size={16} />
             </button>
@@ -67,7 +82,16 @@ export default function Layout() {
               <div className="avatar">{(user?.fullName || "U").slice(0, 1).toUpperCase()}</div>
               <div>
                 <strong>{user?.fullName || "User"}</strong>
-                <p>{user?.role === "employer" ? "Employer Admin" : "Patient"}</p>
+                <p>
+                  {user?.accountType === "employer" ? (
+                    "Employer · organization owner"
+                  ) : (
+                    <>
+                      Family · {user?.familyRole || "member"}
+                      {workOrgLabel ? ` · Work · ${workOrgLabel}` : ""}
+                    </>
+                  )}
+                </p>
               </div>
             </div>
           </div>

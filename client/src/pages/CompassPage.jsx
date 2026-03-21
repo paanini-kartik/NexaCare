@@ -1,5 +1,18 @@
+import { useState, useMemo } from "react";
 import HealthCompass from "../components/HealthCompass/HealthCompass";
+import { clinicLocations } from "../data/mockData";
 
 export default function CompassPage() {
-  return <HealthCompass />;
+  return (
+    <div className="page-flow">
+      <header className="page-hero page-hero--alive">
+        <h1>Health Compass</h1>
+        <p>
+          Find care near you—search, filter by type, and explore clinics on the map with live pins and details.
+        </p>
+      </header>
+
+      <HealthCompass />
+    </div>
+  );
 }
