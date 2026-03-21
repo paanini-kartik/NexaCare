@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Anthropic from "@anthropic-ai/sdk";
-import type { User, Message } from "./types";
+import type { User, Message, Appointment } from "./types";
 
 // ---------------------------------------------------------------------------
 // Mock — used until /api/user/:id is live
@@ -18,21 +18,41 @@ const MOCK_USER: User = {
   location: { lat: 43.6532, lng: -79.3832 },
 };
 
+const MOCK_APPOINTMENTS: Appointment[] = [
+  { id:"apt_01", type:"Annual Dental Checkup",  clinicName:"Smile Dental Studio",    date:"2026-04-02T10:00:00Z", duration:60, status:"upcoming" },
+  { id:"apt_02", type:"Physiotherapy Session",  clinicName:"ActiveCare Physio",       date:"2026-04-10T14:30:00Z", duration:45, status:"upcoming" },
+  { id:"apt_03", type:"General Checkup",        clinicName:"Bayview Family Medicine", date:"2026-04-18T09:00:00Z", duration:30, status:"upcoming" },
+  { id:"apt_04", type:"Vision Test",            clinicName:"ClearView Optometry",     date:"2025-12-15T11:00:00Z", duration:45, status:"past"     },
+  { id:"apt_05", type:"Dental Cleaning",        clinicName:"Smile Dental Studio",     date:"2025-10-03T10:00:00Z", duration:45, status:"past"     },
+];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function buildSystemPrompt(user: User): string {
+function buildSystemPrompt(user: User, appointments: Appointment[]): string {
   const { name, age, occupation, benefits: b } = user;
-  const dental = b.dental.total - b.dental.used;
-  const vision = b.vision.total - b.vision.used;
-  const physio = b.physio.total - b.physio.used;
-  return (
-    `You are a personal health assistant for ${name}, a ${age}-year-old ${occupation}.\n` +
-    `Benefits: dental $${b.dental.used}/$${b.dental.total} ($${dental} left), ` +
-    `vision $${b.vision.used}/$${b.vision.total} ($${vision} left), ` +
-    `physio $${b.physio.used}/$${b.physio.total} ($${physio} left).\n` +
-    `Keep answers 2-4 sentences. Friendly, not clinical.`
-  );
+  const fmt = (d: string) =>
+    new Date(d).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+  const fmtList = (apts: Appointment[]) =>
+    apts.length === 0 ? "None" : apts.map(a => `${a.type} at ${a.clinicName} on ${fmt(a.date)}`).join(", ");
+
+  return `You are a personal health assistant for ${name}, a ${age}-year-old ${occupation}.
+
+Their current benefits:
+- Dental: $${b.dental.used} used of $${b.dental.total} ($${b.dental.total - b.dental.used} remaining)
+- Vision: $${b.vision.used} used of $${b.vision.total} ($${b.vision.total - b.vision.used} remaining)
+- Physiotherapy: $${b.physio.used} used of $${b.physio.total} ($${b.physio.total - b.physio.used} remaining)
+
+Upcoming appointments: ${fmtList(appointments.filter(a => a.status === "upcoming"))}
+Past appointments: ${fmtList(appointments.filter(a => a.status === "past"))}
+Location: Toronto
+
+Rules:
+- Answer health and scheduling questions clearly and concisely
+- Proactively mention when the user is overdue for a checkup
+- Reference specific benefit balances when relevant
+- Keep answers to 2–4 sentences unless asked for more
+- Tone: friendly, direct, not clinical`;
 }
 
 // Resolve API key from Vite or CRA env conventions
@@ -132,21 +152,26 @@ interface ChatWidgetProps {
 
 export default function ChatWidget({ userId }: ChatWidgetProps) {
   const [user, setUser] = useState<User | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch user — fall back to mock if route isn't live yet
   useEffect(() => {
-    fetch(`/api/user/${userId}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("not ready");
-        return r.json();
+    Promise.all([
+      fetch(`/api/user/${userId}`).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+      fetch(`/api/appointments/${userId}`).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+    ])
+      .then(([userData, aptsData]) => {
+        setUser(userData);
+        setAppointments(aptsData);
       })
-      .then((data: User) => setUser(data))
-      .catch(() => setUser(MOCK_USER));
+      .catch(() => {
+        setUser(MOCK_USER);
+        setAppointments(MOCK_APPOINTMENTS);
+      });
   }, [userId]);
 
   // Auto-scroll to bottom on new messages
@@ -172,7 +197,7 @@ export default function ChatWidget({ userId }: ChatWidgetProps) {
       const response = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 512,
-        system: buildSystemPrompt(user),
+        system: buildSystemPrompt(user, appointments),
         messages: thread,
       });
 
