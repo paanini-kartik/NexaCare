@@ -20,6 +20,8 @@ export interface Recommendation {
 export interface Message {
   role: "user" | "assistant";
   content: string;
+  imageBase64?: string;  // base64-encoded image data (no data: prefix)
+  imageType?: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 }
 
 export interface Appointment {
