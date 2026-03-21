@@ -123,3 +123,25 @@ def get_clinics(lat: float = 43.6532, lng: float = -79.3832, type: str = "all"):
         return MOCK_CLINICS
 
     return [clinic for clinic in MOCK_CLINICS if clinic["type"] == type]
+
+@router.get("/{place_id}")
+def get_clinic_details(place_id: str):
+    api_key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+    if not api_key:
+        return {}
+
+    params_dict = {
+        "place_id": place_id,
+        "fields": "name,formatted_address,formatted_phone_number,website,editorial_summary,business_status,geometry,rating,user_ratings_total,opening_hours",
+        "key": api_key,
+    }
+    params = urlencode(params_dict)
+    url = f"https://maps.googleapis.com/maps/api/place/details/json?{params}"
+
+    try:
+        with urlopen(url, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        return payload.get("result", {})
+    except Exception as e:
+        print(f"API Error fetching place details: {e}")
+        return {}
