@@ -4,6 +4,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { CARE_SERVICE_PRESETS, CHECKUP_TYPE_META, CORE_CHECKUP_KEYS } from "../data/checkupConfig";
 import { getCoreIntervalDays } from "../lib/cadence";
 
+const NO_EXTRAS = [];
+
 function recommendationFromProfile(age, occupation, medicalHistory = []) {
   const parsedAge = Number(age || 0);
   const demandingJobs = ["nurse", "construction", "warehouse", "athlete", "firefighter"];
@@ -41,7 +43,18 @@ export default function HealthProfilePage() {
   const [otherCareName, setOtherCareName] = useState("");
 
   const checkupSchedule = healthProfile.checkupSchedule;
-  const extraCareServices = healthProfile.extraCareServices || [];
+  const extraCareServices = healthProfile.extraCareServices ?? NO_EXTRAS;
+
+  const extraNamesLower = useMemo(
+    () => new Set(extraCareServices.map((e) => e.name.toLowerCase())),
+    [extraCareServices]
+  );
+
+  /** Preset chips only for services not already in your list (preset or custom name). */
+  const availablePresets = useMemo(
+    () => CARE_SERVICE_PRESETS.filter((p) => !extraNamesLower.has(p.name.toLowerCase())),
+    [extraNamesLower]
+  );
 
   const setCoreLastVisit = (key, iso) => {
     updateProfile({
@@ -392,19 +405,23 @@ export default function HealthProfilePage() {
             })}
           </div>
 
-          <h4 className="profile-mini-heading">Add wellness &amp; therapy</h4>
-          <div className="care-preset-row profile-preset-tight">
-            {CARE_SERVICE_PRESETS.map((preset) => (
-              <button
-                key={preset.name}
-                type="button"
-                className="care-preset-chip"
-                onClick={() => addPresetCare(preset)}
-              >
-                + {preset.name}
-              </button>
-            ))}
-          </div>
+          {availablePresets.length > 0 && (
+            <>
+              <h4 className="profile-mini-heading">Add wellness &amp; therapy</h4>
+              <div className="care-preset-row profile-preset-tight">
+                {availablePresets.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    className="care-preset-chip"
+                    onClick={() => addPresetCare(preset)}
+                  >
+                    + {preset.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="profile-other-row">
             <label className="form-field profile-other-input">

@@ -28,22 +28,34 @@ export default function ChatbotWidget() {
   return (
     <div className="chatbot-mini">
       <button className="chat-fab" type="button" aria-label="Open assistant">
-        <MessageCircle size={22} />
+        <MessageCircle size={22} strokeWidth={2} />
       </button>
-      <div className="chat-panel contained chat-panel-inner">
-        <div className="chat-panel-head">
-          <strong>AI Assistant</strong>
+      <div className="chat-panel" role="dialog" aria-label="AI Assistant">
+        <div className="chat-panel-card">
+          <header className="chat-panel-head">
+            <strong>AI Assistant</strong>
+            <span className="chat-panel-badge">NexaCare</span>
+          </header>
+          <div className="chat-log">
+            {messages.map((m, idx) => (
+              <div key={`${m.from}-${idx}`} className={`chat-message chat-message--${m.from}`}>
+                {m.text}
+              </div>
+            ))}
+            <div ref={bottomRef} />
+          </div>
+          <form onSubmit={send} className="chat-form">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask a question"
+              aria-label="Message"
+            />
+            <button className="chat-send-btn" type="submit">
+              Send
+            </button>
+          </form>
         </div>
-        <div className="chat-log">
-          {messages.map((m, idx) => (
-            <div key={`${m.from}-${idx}`} className={`chat-message ${m.from}`}>{m.text}</div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-        <form onSubmit={send} className="chat-form">
-          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask a question" />
-          <button className="primary-btn" type="submit">Send</button>
-        </form>
       </div>
     </div>
   );
