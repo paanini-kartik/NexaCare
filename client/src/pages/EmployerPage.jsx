@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 function CategoryEditor({ categories, onChange }) {
@@ -89,22 +90,20 @@ export default function EmployerPage() {
 
   const isEmployer = user?.accountType === "employer";
 
-  if (!isEmployer || !org) {
+  if (!isEmployer) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (!org) {
     return (
       <div className="page-flow">
         <header className="page-hero page-hero--alive">
           <h1>Employer hub</h1>
           <p>
-            At sign-up, choose <strong>Yes</strong> for <strong>Firm role manager (employer)</strong> to create an organization,
-            define employee benefit roles, and push rate changes to every assignment—including household members on the same role.
+            No organization is linked to this employer account yet. At sign-up, choosing <strong>Yes</strong> for{" "}
+            <strong>Firm role manager (employer)</strong> creates one automatically.
           </p>
         </header>
-        <section className="contained">
-          <p className="page-section-lead" style={{ marginBottom: 0 }}>
-            Employees can join from the Employee tab during signup and pick a role you define here. Family accounts can link
-            to your organization from Benefits after an owner enables household sync.
-          </p>
-        </section>
       </div>
     );
   }
