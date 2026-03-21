@@ -56,7 +56,7 @@ def fetch_google_clinics(lat: float, lng: float, clinic_type: str) -> list[dict[
 
     params_dict = {
         "location": f"{lat},{lng}",
-        "radius": 10000,
+        "rankby": "distance",
         "key": api_key,
     }
     
@@ -64,6 +64,9 @@ def fetch_google_clinics(lat: float, lng: float, clinic_type: str) -> list[dict[
         params_dict["keyword"] = "health OR clinic OR hospital"
     elif clinic_type in ["vision", "optometry"]:
         params_dict["keyword"] = "optometrist OR eye doctor OR vision OR optometry"
+    elif clinic_type == "hospital":
+        params_dict["type"] = "hospital"
+        params_dict["keyword"] = "emergency room OR trauma OR general hospital"
     else:
         params_dict["type"] = TYPE_TO_PLACES.get(clinic_type, "hospital")
 
