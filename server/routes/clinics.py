@@ -54,26 +54,46 @@ def fetch_google_clinics(lat: float, lng: float, clinic_type: str) -> list[dict[
     if not api_key:
         return []
 
-    places_type = TYPE_TO_PLACES.get(clinic_type, "hospital")
-    params = urlencode(
-        {
-            "location": f"{lat},{lng}",
-            "radius": 3500,
-            "type": places_type,
-            "key": api_key,
-        }
-    )
+    params_dict = {
+        "location": f"{lat},{lng}",
+        "radius": 10000,
+        "key": api_key,
+    }
+    
+    if clinic_type == "all":
+        params_dict["keyword"] = "health OR clinic OR hospital"
+    elif clinic_type in ["vision", "optometry"]:
+        params_dict["keyword"] = "optometrist OR eye doctor OR vision OR optometry"
+    else:
+        params_dict["type"] = TYPE_TO_PLACES.get(clinic_type, "hospital")
+
+    params = urlencode(params_dict)
     url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?{params}"
 
-    with urlopen(url, timeout=8) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    all_results = []
+    for _ in range(1):  # Fetch 1 page (fast load time, 20 results)
+        with urlopen(url, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        
+        all_results.extend(payload.get("results", []))
+        
+        next_page_token = payload.get("next_page_token")
+        if not next_page_token:
+            break
+            
+        import time
+        time.sleep(2)  # Google requires a short delay before token is valid
+        next_params = urlencode({"pagetoken": next_page_token, "key": api_key})
+        url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?{next_params}"
 
-    results = payload.get("results", [])
     clinics = []
-    for idx, item in enumerate(results):
+    for idx, item in enumerate(all_results):
         location = item.get("geometry", {}).get("location", {})
         google_types = item.get("types", [])
         normalized_type = normalize_clinic_type(google_types)
+        if clinic_type != "all":
+            normalized_type = clinic_type
+            
         clinics.append(
             {
                 "id": item.get("place_id", f"g_{idx}"),
@@ -85,14 +105,15 @@ def fetch_google_clinics(lat: float, lng: float, clinic_type: str) -> list[dict[
             }
         )
 
-    return [clinic for clinic in clinics if clinic["lat"] is not None and clinic["lng"] is not None][:20]
+    return [clinic for clinic in clinics if clinic["lat"] is not None and clinic["lng"] is not None]
 
 
 @router.get("/")
 def get_clinics(lat: float = 43.6532, lng: float = -79.3832, type: str = "all"):
     try:
         google_clinics = fetch_google_clinics(lat=lat, lng=lng, clinic_type=type)
-    except Exception:
+    except Exception as e:
+        print(f"API Error fetching live clinics: {e}")
         google_clinics = []
 
     if google_clinics:
