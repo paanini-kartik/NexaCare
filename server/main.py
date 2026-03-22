@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import clinics, appointments
 
+
 app = FastAPI(title="NexaCare API", version="1.0.0")
 
 app.add_middleware(

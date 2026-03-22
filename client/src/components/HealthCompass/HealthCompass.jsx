@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { Clock, MapPin, Phone, Globe, Star } from "lucide-react";
+import { Clock, MapPin, Phone, Globe, Star, Navigation } from "lucide-react";
 import { clinicLocations } from "../../data/mockData";
 
 const userIcon = new L.Icon({
@@ -309,6 +309,35 @@ export default function HealthCompass() {
               <p style={{ textTransform: "capitalize", color: "var(--text-secondary, #64748b)" }}>
                 {selectedClinic.type}
               </p>
+
+              {userLocation && (
+                <a 
+                  href={`https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${selectedClinic.lat},${selectedClinic.lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    marginTop: "0.75rem",
+                    padding: "0.5rem 1rem",
+                    backgroundColor: "#2563eb",
+                    color: "white",
+                    borderRadius: "8px",
+                    fontWeight: "500",
+                    textDecoration: "none",
+                    boxShadow: "0 2px 4px rgba(37,99,235,0.2)",
+                    fontSize: "0.95rem",
+                    width: "fit-content",
+                    transition: "opacity 0.2s ease"
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.opacity = "0.9"}
+                  onMouseOut={(e) => e.currentTarget.style.opacity = "1"}
+                >
+                  <Navigation size={18} />
+                  Get Directions
+                </a>
+              )}
               
               {isDetailsLoading ? (
                 <div style={{ padding: "1rem 0", color: "#64748b", fontSize: "0.9rem" }}>Loading place details...</div>
