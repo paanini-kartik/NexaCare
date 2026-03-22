@@ -119,7 +119,7 @@ function MemberBenefitsSummaryCard({ benefits }) {
   ];
 
   return (
-    <section className="wallet-card dashboard-benefits-hero" aria-label="Benefits summary">
+    <section className="wallet-card dashboard-benefits-hero dashboard-benefits-hero--member" aria-label="Benefits summary">
       <p className="wallet-eyebrow">Active benefits</p>
       {hasCategories && benefits?.hasAny ? (
         <>
@@ -140,7 +140,7 @@ function MemberBenefitsSummaryCard({ benefits }) {
                     <span>{label}</span>
                     <span className="dash-benefit-bar-rem" style={{ color }}>${rem.toLocaleString()} left</span>
                   </div>
-                  <div className="dash-benefit-bar-track">
+                  <div className="dash-benefit-bar-track dash-benefit-bar-track--slim">
                     <div className="dash-benefit-bar-fill" style={{ width: `${pct}%`, background: color }} />
                   </div>
                 </div>
@@ -389,8 +389,8 @@ function AIRecommendations({ user, benefits, appointments }) {
   };
 
   return (
-    <section className="dash-recs-section" aria-labelledby="dash-recs-heading">
-      <div className="dash-section-head">
+    <section className="dash-recs-section dash-recs-section--full" aria-labelledby="dash-recs-heading">
+      <div className="dash-section-head dash-section-head--recs">
         <h2 id="dash-recs-heading" className="title-vibe">Suggested for you</h2>
         <span className="dash-ai-badge">AI</span>
       </div>
@@ -497,22 +497,23 @@ export default function DashboardPage() {
 
   return (
     <div className="page-flow dashboard-flow">
-      {/* ── Hero ── */}
-      <header className="page-hero page-hero--alive dashboard-page-intro">
-        <p className="page-hero-eyebrow">
+      {/* ── Launch hero: date → greeting → name as centerpiece ── */}
+      <header className="dashboard-launch-hero">
+        <p className="dashboard-launch-date">
           {new Date().toLocaleDateString("en-CA", { weekday: "long", month: "long", day: "numeric" })}
         </p>
-        <h1>{greeting}, {firstName}</h1>
-        <p>{isEmployer
-          ? "Organization overview — benefit templates and role keys for your workers."
-          : contextLine}
+        <p className="dashboard-launch-kicker">{greeting},</p>
+        <h1 className="dashboard-launch-name">
+          <span className="dashboard-launch-name-mark">{firstName}</span>
+        </h1>
+        <p className="dashboard-launch-sub">
+          {isEmployer
+            ? "Organization overview — benefit templates and role keys for your workers."
+            : contextLine}
         </p>
       </header>
 
-      {/* ── Stats bar ── */}
-      {!isEmployer && <StatsBar appointments={appointments} benefits={benefits} />}
-
-      {/* ── Benefits + onboarding ── */}
+      {/* ── Benefits + onboarding (above stats) ── */}
       <div className={`dashboard-benefits-onboard${memberOnboardingDismissed ? " dashboard-benefits-onboard--full" : ""}`}>
         {isEmployer
           ? <EmployerProgramSummaryCard />
@@ -522,6 +523,9 @@ export default function DashboardPage() {
           : memberOnboardingDismissed ? null
           : <OnboardingRibbon steps={onboardingSteps} stepComplete={memberStepComplete} />}
       </div>
+
+      {/* ── Stats bar (below black benefits box) ── */}
+      {!isEmployer && <StatsBar appointments={appointments} benefits={benefits} />}
 
       {/* ── Quick actions ── */}
       <QuickActionsVivid
@@ -534,25 +538,26 @@ export default function DashboardPage() {
         <UpcomingAppointments appointments={appointments} userEmail={user?.email} />
       )}
 
-      {/* ── Checkup section ── */}
+      {/* ── Checkup section (care windows, centered) ── */}
       {!isEmployer && <CheckupDashboardSection />}
 
-      {/* ── AI Recommendations + empty lower ── */}
-      <div className="dashboard-lower dashboard-lower--alive">
-        {!isEmployer && (
-          <AIRecommendations
-            user={{ email: user?.email, age: healthProfile?.age, occupation: healthProfile?.occupation }}
-            benefits={benefits}
-            appointments={appointments}
-          />
-        )}
-        {isEmployer && (
+      {/* ── AI recommendations — full width below care windows ── */}
+      {!isEmployer && (
+        <AIRecommendations
+          user={{ email: user?.email, age: healthProfile?.age, occupation: healthProfile?.occupation }}
+          benefits={benefits}
+          appointments={appointments}
+        />
+      )}
+
+      {isEmployer && (
+        <div className="dashboard-lower dashboard-lower--alive dashboard-lower--employer-only">
           <section className="insights-vibe" aria-labelledby="dash-insights-heading">
             <h2 id="dash-insights-heading" className="title-vibe">Organization</h2>
             <p className="insights-vibe-lead">Member-facing health tools stay on employee accounts. Manage benefit templates and keys from Employer Hub and Settings.</p>
           </section>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

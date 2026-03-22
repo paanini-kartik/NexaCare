@@ -1,6 +1,6 @@
 import { Bell, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import ChatbotWidget from "./ChatbotWidget";
 import OnboardingOverlay from "./OnboardingOverlay";
@@ -18,6 +18,8 @@ const navItems = [
 
 export default function Layout() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isHealthCompass = pathname.startsWith("/health-compass");
   const { user, logout, showOnboardingOverlay, effectiveInsurers } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [notification, setNotification] = useState(null);
@@ -78,81 +80,88 @@ export default function Layout() {
   };
 
   return (
-    <div className="portal-shell">
-      <aside className="sidebar-fixed">
-        <div className="brand-wrap">
-          <div className="brand-icon">N</div>
-          <div>
-            <strong>NexaCare</strong>
-            <p>{user?.accountType === "employer" ? "Organization" : "Patient Portal"}</p>
-          </div>
-        </div>
-
-        <nav className="sidebar-nav">
-          {visibleNavItems.map((item) =>
-            item.enabled ? (
-              <NavLink key={item.to} to={item.to} className="nav-item">
-                {item.label}
-              </NavLink>
-            ) : (
-              <span key={item.to} className="nav-item disabled">
-                {item.label}
-              </span>
-            )
-          )}
-        </nav>
-
-        <button className="secondary-btn" type="button" onClick={onLogout}>
-          Log out
-        </button>
-      </aside>
-
-      <div className="content-wrap vibe-canvas">
-        <header className="sticky-header">
-          <div className="search-pill">
-            <Search size={16} />
-            <input placeholder="Search appointments, clinics, support" />
-          </div>
-          <div className="header-right">
-            <button
-              className="icon-btn"
-              type="button"
-              aria-label="Settings"
-              onClick={() => navigate("/settings")}
-            >
-              <Settings size={16} />
-            </button>
-            <button className="icon-btn" type="button" aria-label="Notifications">
-              <Bell size={16} />
-            </button>
-            <div className="profile-stack">
-              <div className="avatar">{(user?.fullName || "U").slice(0, 1).toUpperCase()}</div>
+    <>
+      <div className="portal-shell">
+        <aside className="sidebar-fixed">
+          <div className="sidebar-body">
+            <div className="brand-wrap">
+              <div className="brand-icon">N</div>
               <div>
-                <strong>{user?.fullName || "User"}</strong>
+                <strong>NexaCare</strong>
+                <p>{user?.accountType === "employer" ? "Organization" : "Patient Portal"}</p>
               </div>
             </div>
-          </div>
-        </header>
 
-        <main className="main-content">
-          <div className="content-container">
-            <Outlet />
+            <nav className="sidebar-nav">
+              {visibleNavItems.map((item) =>
+                item.enabled ? (
+                  <NavLink key={item.to} to={item.to} className="nav-item">
+                    {item.label}
+                  </NavLink>
+                ) : (
+                  <span key={item.to} className="nav-item disabled">
+                    {item.label}
+                  </span>
+                )
+              )}
+            </nav>
           </div>
-        </main>
-      </div>
 
-      <ChatbotWidget
-        appointments={appointments}
-        benefits={mappedBenefits}
-        onBookAppointment={handleBookAppointment}
-        onShowNotification={handleShowNotification}
-      />
-      {notification && (
-        <div className={`agent-toast agent-toast--${notification.type}`} role="alert">
-          {notification.message}
+          <button className="secondary-btn sidebar-logout" type="button" onClick={onLogout}>
+            Log out
+          </button>
+        </aside>
+
+        <div className="content-wrap vibe-canvas">
+          <header className="sticky-header">
+            <div className="search-pill">
+              <Search size={16} />
+              <input placeholder="Search appointments, clinics, support" />
+            </div>
+            <div className="header-right">
+              <button
+                className="icon-btn"
+                type="button"
+                aria-label="Settings"
+                onClick={() => navigate("/settings")}
+              >
+                <Settings size={16} />
+              </button>
+              <button className="icon-btn" type="button" aria-label="Notifications">
+                <Bell size={16} />
+              </button>
+              <div className="profile-stack">
+                <div className="avatar">{(user?.fullName || "U").slice(0, 1).toUpperCase()}</div>
+                <div>
+                  <strong>{user?.fullName || "User"}</strong>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <main className={`main-content${isHealthCompass ? " main-content--compass-bleed" : ""}`}>
+            <div className="content-container">
+              <Outlet />
+            </div>
+          </main>
         </div>
-      )}
-      {showOnboardingOverlay ? <OnboardingOverlay /> : null}
-    </div>
+
+        {notification && (
+          <div className={`agent-toast agent-toast--${notification.type}`} role="alert">
+            {notification.message}
+          </div>
+        )}
+        {showOnboardingOverlay ? <OnboardingOverlay /> : null}
+      </div>
+      {/* Zero-size anchor so fixed UI doesn’t add a flex/grid row (sidebar stays full height) */}
+      <div className="layout-fixed-layer">
+        <ChatbotWidget
+          appointments={appointments}
+          benefits={mappedBenefits}
+          onBookAppointment={handleBookAppointment}
+          onShowNotification={handleShowNotification}
+        />
+      </div>
+    </>
   );
 }

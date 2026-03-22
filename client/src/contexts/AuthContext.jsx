@@ -290,7 +290,10 @@ function normalizeProfile(rawProfile) {
   return {
     age: rawProfile?.age ?? "",
     occupation: rawProfile?.occupation || "",
-    calendarProvider: rawProfile?.calendarProvider || "Google",
+    calendarProvider:
+      rawProfile?.calendarProvider != null && String(rawProfile.calendarProvider).trim() !== ""
+        ? String(rawProfile.calendarProvider).trim()
+        : "",
     medicalHistory,
     allergies,
     favoriteClinics,
