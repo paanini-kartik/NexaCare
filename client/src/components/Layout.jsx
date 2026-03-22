@@ -4,6 +4,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import ChatbotWidget from "./ChatbotWidget";
 import OnboardingOverlay from "./OnboardingOverlay";
+import { apiFetch } from "../lib/api";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", enabled: true },
@@ -24,7 +25,7 @@ export default function Layout() {
   // Fetch real appointments from backend on login
   useEffect(() => {
     if (!user?.email) return;
-    fetch(`http://localhost:8000/api/appointments/${encodeURIComponent(user.email)}`)
+    apiFetch(`/api/appointments/${encodeURIComponent(user.email)}`)
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setAppointments(data); })
       .catch(() => {});

@@ -5,8 +5,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { useNavigate } from "react-router-dom";
-import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { useAuth } from "../contexts/AuthContext";
+import { apiUrl, apiFetch } from "../lib/api";
 
 const TOOLS = [
   {
@@ -665,8 +665,8 @@ export default function ChatbotWidget({
         const userLng = -79.3832;
         const typeParam = toolInput.type ?? "all";
         try {
-          const res = await fetch(
-            `http://localhost:8000/api/clinics?lat=${userLat}&lng=${userLng}&type=${typeParam}`
+          const res = await apiFetch(
+            `/api/clinics?lat=${userLat}&lng=${userLng}&type=${typeParam}`
           );
           const data = await res.json();
           return JSON.stringify(Array.isArray(data) ? data : clinics);
@@ -693,7 +693,7 @@ export default function ChatbotWidget({
 
         // Hit real backend — saves to Firebase + fires Resend emails
         try {
-          const res = await fetch("http://localhost:8000/api/appointments/", {
+          const res = await apiFetch("/api/appointments/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(newAppt),
@@ -737,7 +737,7 @@ export default function ChatbotWidget({
       case "cancel_appointment": {
         const { appointmentId } = toolInput;
         try {
-          await fetch(`http://localhost:8000/api/appointments/${appointmentId}`, {
+          await apiFetch(`/api/appointments/${appointmentId}`, {
             method: "DELETE",
           });
         } catch (err) {
@@ -889,7 +889,7 @@ export default function ChatbotWidget({
       case "add_to_calendar": {
         const { type, clinicName, date, duration } = toolInput;
         try {
-          const res = await fetch("http://localhost:8000/api/calendar/add-event", {
+          const res = await apiFetch("/api/calendar/add-event", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -936,16 +936,12 @@ export default function ChatbotWidget({
   }
 
   async function callAPI(apiMessages) {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch(apiUrl("/api/ai/chat"), {
       method: "POST",
       headers: {
-        "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
         max_tokens: 1024,
         system: systemPromptRef.current || buildSystemPrompt(realUser, benefits, appointments),
         tools: TOOLS,
@@ -1006,20 +1002,20 @@ export default function ChatbotWidget({
 
   const onSubmit = (e) => { e.preventDefault(); sendMessage(input.trim()); };
 
-  // ── PDF text extraction via pdfjs-dist ──────────────────────────────────
+  // ── PDF text extraction via backend (pypdf) ─────────────────────────────
   async function extractPdfText(file) {
-    const pdfjsLib = await import("pdfjs-dist");
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
-    const buffer    = await file.arrayBuffer();
-    const pdf       = await pdfjsLib.getDocument({ data: buffer }).promise;
-    const pages     = await Promise.all(
-      Array.from({ length: pdf.numPages }, (_, i) =>
-        pdf.getPage(i + 1).then((p) => p.getTextContent()).then((tc) =>
-          tc.items.map((it) => it.str).join(" ")
-        )
-      )
-    );
-    return pages.join("\n");
+    const form = new FormData();
+    form.append("file", file);
+    const res = await apiFetch("/api/pdf/extract-text", {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail ?? "Could not read the PDF. Make sure it's a valid, non-scanned PDF.");
+    }
+    const { text } = await res.json();
+    return text;
   }
 
   // ── File upload handler ─────────────────────────────────────────────────

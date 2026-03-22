@@ -24,9 +24,9 @@ router = APIRouter()
 
 CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-REDIRECT_URI  = "http://localhost:8000/api/calendar/callback"
+REDIRECT_URI  = os.getenv("GOOGLE_CALENDAR_REDIRECT_URI", "http://localhost:8000/api/calendar/callback")
 SCOPES        = ["https://www.googleapis.com/auth/calendar.events"]
-FRONTEND_URL  = "http://localhost:5173"
+FRONTEND_URL  = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 
 def _configured() -> bool:

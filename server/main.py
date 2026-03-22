@@ -12,19 +12,24 @@ _server_dir = Path(__file__).resolve().parent
 _repo_root = _server_dir.parent
 
 # Load env FIRST before any other imports read os.getenv()
-load_dotenv(_repo_root / ".env")
+load_dotenv(_repo_root / ".env", override=True)
 load_dotenv(_server_dir / ".env", override=True)
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import clinics, appointments, users, benefits, health as health_route, calendar
+from routes import clinics, appointments, users, benefits, health as health_route, calendar, pdf as pdf_route
+from routes import ai as ai_route
 
 
 app = FastAPI(title="NexaCare API", version="1.0.0")
 
+_raw_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,3 +47,5 @@ app.include_router(users.router,         prefix="/api/users")
 app.include_router(benefits.router,      prefix="/api/benefits")
 app.include_router(health_route.router,  prefix="/api/health-profile")
 app.include_router(calendar.router,      prefix="/api/calendar")
+app.include_router(pdf_route.router,     prefix="/api/pdf")
+app.include_router(ai_route.router,      prefix="/api/ai")
