@@ -231,6 +231,11 @@ const TOOLS = [
     },
   },
   {
+    name: "restore_last_action",
+    description: "Undo / restore the last destructive action (removes a provider, allergy, medical event, or favorite clinic). Call this when the user says 'undo', 'restore', 'bring back', or 'I made a mistake'.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "navigate_to",
     description: "Navigate the user to a specific page in the app",
     input_schema: {
@@ -395,6 +400,9 @@ export default function ChatbotWidget({
   useEffect(() => {
     if (propBenefits) setBenefits(propBenefits);
   }, [benefitKey]);
+
+  // Undo stack — each entry: { label: string, restore: () => void }
+  const undoStackRef = useRef([]);
 
 
   // Rebuild system prompt ref whenever data changes
@@ -588,6 +596,12 @@ export default function ChatbotWidget({
           : existing.filter(
               (p) => !String(p.name ?? "").toLowerCase().includes(providerName.toLowerCase())
             );
+        // snapshot before destroy
+        const snapshot_providers = [...existing];
+        undoStackRef.current.push({
+          label: `Remove provider "${providerName}"`,
+          restore: () => updatePersonalManualProviders(snapshot_providers),
+        });
         updatePersonalManualProviders(filtered);
         const removed = existing.length - filtered.length;
         return JSON.stringify({ success: true, removed, remaining: filtered.length });
@@ -599,6 +613,12 @@ export default function ChatbotWidget({
         const filtered = existing.filter(
           (e) => !String(e.title ?? "").toLowerCase().includes(title.toLowerCase())
         );
+        // snapshot before destroy
+        const snapshot_medical = [...existing];
+        undoStackRef.current.push({
+          label: `Remove medical event "${title}"`,
+          restore: () => updateProfile({ medicalHistory: snapshot_medical }),
+        });
         updateProfile({ medicalHistory: filtered });
         return JSON.stringify({ success: true, removed: title });
       }
@@ -609,6 +629,12 @@ export default function ChatbotWidget({
         const filtered = existing.filter(
           (c) => !String(c.name ?? "").toLowerCase().includes(name.toLowerCase())
         );
+        // snapshot before destroy
+        const snapshot_clinics = [...existing];
+        undoStackRef.current.push({
+          label: `Remove favorite clinic "${name}"`,
+          restore: () => updateProfile({ favoriteClinics: snapshot_clinics }),
+        });
         updateProfile({ favoriteClinics: filtered });
         return JSON.stringify({ success: true, removed: name });
       }
@@ -627,8 +653,21 @@ export default function ChatbotWidget({
         const filtered = existing.filter(
           (a) => !String(a.name ?? "").toLowerCase().includes(name.toLowerCase())
         );
+        // snapshot before destroy
+        const snapshot_allergies = [...existing];
+        undoStackRef.current.push({
+          label: `Remove allergy "${name}"`,
+          restore: () => updateProfile({ allergies: snapshot_allergies }),
+        });
         updateProfile({ allergies: filtered });
         return JSON.stringify({ success: true, removed: name });
+      }
+
+      case "restore_last_action": {
+        const last = undoStackRef.current.pop();
+        if (!last) return JSON.stringify({ success: false, message: "Nothing to restore — no recent changes found." });
+        last.restore();
+        return JSON.stringify({ success: true, restored: last.label });
       }
 
       case "apply_employer_key": {
