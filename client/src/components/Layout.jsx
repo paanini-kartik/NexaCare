@@ -24,14 +24,32 @@ export default function Layout() {
   const [appointments, setAppointments] = useState([]);
   const [notification, setNotification] = useState(null);
 
-  // Fetch real appointments from backend on login
-  useEffect(() => {
-    if (!user?.email) return;
-    apiFetch(`/api/appointments/${encodeURIComponent(user.email)}`)
-      .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setAppointments(data); })
-      .catch(() => {});
+  const refreshAppointments = useCallback(async () => {
+    if (!user?.email) {
+      setAppointments([]);
+      return [];
+    }
+
+    try {
+      const response = await apiFetch(`/api/appointments/${encodeURIComponent(user.email)}`);
+      if (!response.ok) {
+        return null;
+      }
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setAppointments(data);
+        return data;
+      }
+    } catch {
+      // Keep the current UI state if the backend is temporarily unavailable.
+    }
+
+    return null;
   }, [user?.email]);
+
+  useEffect(() => {
+    void refreshAppointments();
+  }, [refreshAppointments]);
 
   // Map real benefits from effectiveInsurers (flatten all categories)
   // Category names are: "Dental", "Optometry", "Physical" (from employerBenefitTemplates)
@@ -66,7 +84,15 @@ export default function Layout() {
   );
 
   const handleBookAppointment = useCallback((appt) => {
-    setAppointments((prev) => [...prev, appt]);
+    if (!appt?.id) return;
+    setAppointments((prev) => {
+      if (appt._cancelled) {
+        return prev.filter((existing) => existing.id !== appt.id);
+      }
+
+      const next = prev.filter((existing) => existing.id !== appt.id);
+      return [...next, appt];
+    });
   }, []);
 
   const handleShowNotification = useCallback((message, type) => {
@@ -141,7 +167,7 @@ export default function Layout() {
 
           <main className={`main-content${isHealthCompass ? " main-content--compass-bleed" : ""}`}>
             <div className="content-container">
-              <Outlet />
+              <Outlet context={{ appointments, refreshAppointments }} />
             </div>
           </main>
         </div>
@@ -159,6 +185,7 @@ export default function Layout() {
           appointments={appointments}
           benefits={mappedBenefits}
           onBookAppointment={handleBookAppointment}
+          onRefreshAppointments={refreshAppointments}
           onShowNotification={handleShowNotification}
         />
       </div>

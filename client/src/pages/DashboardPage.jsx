@@ -17,10 +17,11 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import CheckupDashboardSection from "../components/CheckupDashboardSection";
 import { useAuth } from "../contexts/AuthContext";
 import { apiFetch, apiUrl } from "../lib/api";
+import { getAppointmentStatus, sortAppointmentsByDate } from "../lib/appointments";
 import { isMemberDashboardOnboardingDismissedSession } from "../lib/memberDashboardOnboarding";
 import {
   employerOnboardingSteps,
@@ -55,9 +56,9 @@ function getGreeting() {
 
 // ── Stats bar ────────────────────────────────────────────────────────────────
 function StatsBar({ appointments, benefits }) {
-  const upcoming = (appointments ?? [])
-    .filter((a) => a.status === "upcoming")
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  const upcoming = sortAppointmentsByDate(
+    (appointments ?? []).filter((a) => getAppointmentStatus(a) === "upcoming")
+  );
 
   const nextAppt = upcoming[0];
   const nextApptLabel = nextAppt
@@ -261,21 +262,27 @@ function QuickActionsVivid({ items, extraActions }) {
 }
 
 // ── Upcoming appointments ─────────────────────────────────────────────────────
-function UpcomingAppointments({ appointments, userEmail }) {
+function UpcomingAppointments({ appointments, onRefreshAppointments }) {
   const navigate = useNavigate();
-  const upcoming = (appointments ?? [])
-    .filter((a) => a.status === "upcoming")
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .slice(0, 3);
+  const upcoming = sortAppointmentsByDate(
+    (appointments ?? []).filter((a) => getAppointmentStatus(a) === "upcoming")
+  ).slice(0, 3);
 
   const [cancelling, setCancelling] = useState(null);
 
   const handleCancel = async (id) => {
     setCancelling(id);
     try {
-      await apiFetch(`/api/appointments/${id}`, { method: "DELETE" });
-      window.location.reload();
+      const response = await apiFetch(`/api/appointments/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("Could not cancel appointment");
+      }
+      if (onRefreshAppointments) {
+        await onRefreshAppointments();
+      }
     } catch {
+      // Keep the current card visible if the backend rejects the cancel request.
+    } finally {
       setCancelling(null);
     }
   };
@@ -348,14 +355,22 @@ function UpcomingAppointments({ appointments, userEmail }) {
 function AIRecommendations({ user, benefits, appointments }) {
   const [recs, setRecs]     = useState(null);
   const [loading, setLoading] = useState(true);
+  const appointmentSignature = JSON.stringify(
+    (appointments ?? []).map((a) => [a.id, a.date, a.status, a.type, a.clinicName])
+  );
+  const benefitSignature = JSON.stringify(benefits ?? null);
 
   useEffect(() => {
-    if (!user?.email) return;
-    const key = `nexacare:recs:${user.email}:${new Date().toDateString()}`;
-    const cached = sessionStorage.getItem(key);
-    if (cached) { setRecs(JSON.parse(cached)); setLoading(false); return; }
+    if (!user?.email) {
+      setRecs([]);
+      setLoading(false);
+      return;
+    }
 
-    const past = (appointments ?? []).filter((a) => a.status === "past");
+    let cancelled = false;
+    setLoading(true);
+
+    const past = (appointments ?? []).filter((a) => getAppointmentStatus(a) === "past");
     const lastDental = past.find((a) => a.type?.toLowerCase().includes("dental"))?.date ?? "never";
     const lastEye    = past.find((a) => a.type?.toLowerCase().includes("vision") || a.type?.toLowerCase().includes("eye"))?.date ?? "never";
     const lastCheckup= past.find((a) => a.type?.toLowerCase().includes("checkup") || a.type?.toLowerCase().includes("general"))?.date ?? "never";
@@ -375,12 +390,21 @@ function AIRecommendations({ user, benefits, appointments }) {
     })
       .then((r) => r.json())
       .then((parsed) => {
-        sessionStorage.setItem(key, JSON.stringify(parsed));
-        setRecs(parsed);
+        if (!cancelled) {
+          setRecs(Array.isArray(parsed) ? parsed : []);
+        }
       })
-      .catch(() => setRecs([]))
-      .finally(() => setLoading(false));
-  }, [user?.email]);
+      .catch(() => {
+        if (!cancelled) setRecs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appointmentSignature, benefitSignature, user?.age, user?.email, user?.occupation]);
 
   const urgencyConfig = {
     high:   { color: "#dc2626", bg: "#fee2e2", Icon: AlertTriangle },
@@ -438,6 +462,9 @@ function AIRecommendations({ user, benefits, appointments }) {
 export default function DashboardPage() {
   const { user, healthProfile, effectiveInsurers } = useAuth();
   const navigate = useNavigate();
+  const outletContext = useOutletContext() ?? {};
+  const appointments = outletContext.appointments ?? [];
+  const refreshAppointments = outletContext.refreshAppointments;
 
   const isEmployer = user?.accountType === "employer";
   const sessionDismissed = !isEmployer && isMemberDashboardOnboardingDismissedSession();
@@ -449,16 +476,6 @@ export default function DashboardPage() {
     Boolean(healthProfile.onboardingCalendarConnected),
     false,
   ];
-
-  // Fetch real appointments
-  const [appointments, setAppointments] = useState([]);
-  useEffect(() => {
-    if (!user?.email) return;
-    apiFetch(`/api/appointments/${encodeURIComponent(user.email)}`)
-      .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setAppointments(d); })
-      .catch(() => {});
-  }, [user?.email]);
 
   // Map benefits from effectiveInsurers
   const benefits = (() => {
@@ -482,8 +499,9 @@ export default function DashboardPage() {
   const firstName = (user?.fullName || user?.name || "there").split(" ")[0];
   const greeting  = getGreeting();
 
-  const upcoming = appointments.filter((a) => a.status === "upcoming")
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  const upcoming = sortAppointmentsByDate(
+    appointments.filter((a) => getAppointmentStatus(a) === "upcoming")
+  );
   const nextAppt = upcoming[0];
   const contextLine = nextAppt
     ? `Your next appointment is ${new Date(nextAppt.date).toLocaleDateString("en-CA", { month: "long", day: "numeric" })} at ${nextAppt.clinicName}.`
@@ -534,7 +552,7 @@ export default function DashboardPage() {
 
       {/* ── Upcoming appointments ── */}
       {!isEmployer && (
-        <UpcomingAppointments appointments={appointments} userEmail={user?.email} />
+        <UpcomingAppointments appointments={appointments} onRefreshAppointments={refreshAppointments} />
       )}
 
       {/* ── Checkup section (care windows, centered) ── */}
