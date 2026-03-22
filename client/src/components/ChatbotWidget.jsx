@@ -1,4 +1,4 @@
-import { Clock, Maximize2, MessageCircle, Minimize2, Paperclip, Plus, X } from "lucide-react";
+import { Activity, AlertTriangle, Calendar, CheckCircle, Clock, Eye, Maximize2, MessageCircle, Minimize2, Paperclip, Pill, Plus, Stethoscope, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -376,27 +376,28 @@ function parseRichReply(raw) {
 
 function UrgencyBadge({ level }) {
   const cfg = {
-    low:    { label: "Low urgency",    color: "#16a34a", bg: "#dcfce7" },
-    medium: { label: "Medium urgency", color: "#d97706", bg: "#fef3c7" },
-    high:   { label: "High urgency",   color: "#dc2626", bg: "#fee2e2" },
-  }[level] ?? { label: level, color: "#6b7280", bg: "#f3f4f6" };
+    low:    { label: "Low urgency",    color: "#16a34a", bg: "#dcfce7", Icon: CheckCircle },
+    medium: { label: "Medium urgency", color: "#d97706", bg: "#fef3c7", Icon: AlertTriangle },
+    high:   { label: "High urgency",   color: "#dc2626", bg: "#fee2e2", Icon: Zap },
+  }[level] ?? { label: level, color: "#6b7280", bg: "#f3f4f6", Icon: Activity };
+  const { Icon } = cfg;
   return (
     <span className="chat-urgency-badge" style={{ color: cfg.color, background: cfg.bg }}>
-      {level === "high" ? "🚨" : level === "medium" ? "⚠️" : "✅"} {cfg.label}
+      <Icon size={12} strokeWidth={2.5} /> {cfg.label}
     </span>
   );
 }
 
 function BenefitCard({ data }) {
   const rows = [
-    { label: "Dental",  key: "dental",  icon: "🦷" },
-    { label: "Vision",  key: "vision",  icon: "👁" },
-    { label: "Physio",  key: "physio",  icon: "💪" },
+    { label: "Dental",  key: "dental",  Icon: Stethoscope },
+    { label: "Vision",  key: "vision",  Icon: Eye },
+    { label: "Physio",  key: "physio",  Icon: Activity },
   ].filter((r) => data[r.key]?.total > 0);
   if (!rows.length) return null;
   return (
     <div className="chat-benefit-card">
-      {rows.map(({ label, key, icon }) => {
+      {rows.map(({ label, key, Icon }) => {
         const { used = 0, total = 0 } = data[key];
         const pct = total > 0 ? Math.min((used / total) * 100, 100) : 0;
         const remaining = total - used;
@@ -404,7 +405,9 @@ function BenefitCard({ data }) {
         return (
           <div key={key} className="chat-benefit-row">
             <div className="chat-benefit-row-top">
-              <span>{icon} {label}</span>
+              <span style={{ display:"flex", alignItems:"center", gap:"5px" }}>
+                <Icon size={13} strokeWidth={1.75} style={{ color }} /> {label}
+              </span>
               <span className="chat-benefit-nums">${remaining} left of ${total}</span>
             </div>
             <div className="chat-benefit-bar-bg">
@@ -423,7 +426,9 @@ function ApptCard({ data }) {
   }) : "TBD";
   return (
     <div className="chat-appt-card">
-      <div className="chat-appt-icon">📅</div>
+      <div className="chat-appt-icon">
+        <Calendar size={20} strokeWidth={1.75} />
+      </div>
       <div className="chat-appt-info">
         <strong>{data.type}</strong>
         <span>{data.clinicName}</span>
@@ -434,12 +439,14 @@ function ApptCard({ data }) {
 }
 
 function ClinicList({ clinics, onBook }) {
-  const typeIcon = { dental: "🦷", optometry: "👁", hospital: "🏥", pharmacy: "💊" };
+  const typeIconMap = { dental: Stethoscope, optometry: Eye, hospital: Activity, pharmacy: Pill };
   return (
     <div className="chat-clinic-list">
-      {clinics.map((c) => (
+      {clinics.map((c) => {
+        const Icon = typeIconMap[c.type] ?? Stethoscope;
+        return (
         <div key={c.id ?? c.name} className="chat-clinic-card">
-          <span className="chat-clinic-icon">{typeIcon[c.type] ?? "🏥"}</span>
+          <span className="chat-clinic-icon"><Icon size={16} strokeWidth={1.75} /></span>
           <div className="chat-clinic-info">
             <strong>{c.name}</strong>
             <span className="chat-clinic-type">{c.type}</span>
@@ -449,7 +456,8 @@ function ClinicList({ clinics, onBook }) {
             Book
           </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
