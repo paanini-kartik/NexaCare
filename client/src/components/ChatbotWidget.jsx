@@ -231,6 +231,20 @@ const TOOLS = [
     },
   },
   {
+    name: "add_to_calendar",
+    description: "Add a booked appointment to the user's Google Calendar. Call this after booking if the user asks, or proactively after book_appointment.",
+    input_schema: {
+      type: "object",
+      required: ["type", "clinicName", "date", "duration"],
+      properties: {
+        type:       { type: "string", description: "Appointment type e.g. 'Dental Cleaning'" },
+        clinicName: { type: "string", description: "Clinic name" },
+        date:       { type: "string", description: "ISO 8601 date string" },
+        duration:   { type: "number", description: "Duration in minutes" },
+      },
+    },
+  },
+  {
     name: "restore_last_action",
     description: "Undo / restore the last destructive action (removes a provider, allergy, medical event, or favorite clinic). Call this when the user says 'undo', 'restore', 'bring back', or 'I made a mistake'.",
     input_schema: { type: "object", properties: {} },
@@ -277,6 +291,7 @@ Tools available:
 - BOOK/CANCEL: book_appointment, cancel_appointment
 - UPDATE PROFILE: update_profile, add_medical_event, remove_medical_event, add_allergy, remove_allergy, set_checkup_date, add_favorite_clinic, remove_favorite_clinic
 - BENEFITS: add_benefit_provider, remove_benefit_provider (use "all" to wipe everything), update_benefit_usage, apply_employer_key
+- CALENDAR: add_to_calendar (after booking, call this proactively if user has Google Calendar connected)
 - NAVIGATE: navigate_to (dashboard, health-profile, health-compass, benefits, settings, emergency)
 - UI: show_notification
 
@@ -674,6 +689,27 @@ export default function ChatbotWidget({
         });
         updateProfile({ allergies: filtered });
         return JSON.stringify({ success: true, removed: name });
+      }
+
+      case "add_to_calendar": {
+        const { type, clinicName, date, duration } = toolInput;
+        try {
+          const res = await fetch("http://localhost:8000/api/calendar/add-event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userEmail: realUser.email,
+              type, clinicName, date, duration,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            return JSON.stringify({ success: true, link: data.link });
+          }
+          return JSON.stringify({ success: false, reason: data.reason });
+        } catch (err) {
+          return JSON.stringify({ success: false, reason: err.message });
+        }
       }
 
       case "restore_last_action": {

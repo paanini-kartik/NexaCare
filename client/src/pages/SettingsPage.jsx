@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { createDefaultManualProvider } from "../lib/manualBenefitDefaults";
+import { useSearchParams } from "react-router-dom";
 
 function normEmail(email) {
   return String(email || "")
@@ -134,6 +135,7 @@ export default function SettingsPage() {
     const t = [
       { id: "profile", label: "Profile" },
       { id: "access", label: "Access & roles" },
+      { id: "integrations", label: "Integrations" },
     ];
     if (showConnectionsTab) t.push({ id: "connections", label: "Connections" });
     return t;
@@ -144,6 +146,51 @@ export default function SettingsPage() {
   useEffect(() => {
     if (tab === "connections" && !showConnectionsTab) setTab("profile");
   }, [tab, showConnectionsTab]);
+
+  const [searchParams] = useSearchParams();
+  const [calendarConnected, setCalendarConnected] = useState(null); // null=loading, true/false
+  const [calendarMsg, setCalendarMsg] = useState("");
+
+  // Check calendar status on mount + handle redirect-back from Google
+  useEffect(() => {
+    if (!user?.email) return;
+    const calParam = searchParams.get("calendar");
+    if (calParam === "connected") {
+      setCalendarConnected(true);
+      setCalendarMsg("✅ Google Calendar connected! Appointments will be added automatically.");
+      setTab("integrations");
+    } else if (calParam === "error") {
+      setCalendarMsg(`❌ Connection failed: ${searchParams.get("reason") || "unknown error"}`);
+      setTab("integrations");
+    }
+    // Check current status from backend
+    fetch(`http://localhost:8000/api/calendar/status?user_email=${encodeURIComponent(user.email)}`)
+      .then((r) => r.json())
+      .then((d) => setCalendarConnected(d.connected))
+      .catch(() => setCalendarConnected(false));
+  }, [user?.email]);
+
+  const connectCalendar = async () => {
+    if (!user?.email) return;
+    try {
+      const res  = await fetch(`http://localhost:8000/api/calendar/auth-url?user_email=${encodeURIComponent(user.email)}`);
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setCalendarMsg("⚠️ " + (data.detail || "Could not get auth URL"));
+      }
+    } catch {
+      setCalendarMsg("⚠️ Backend unavailable — make sure the server is running");
+    }
+  };
+
+  const disconnectCalendar = async () => {
+    if (!user?.email) return;
+    await fetch(`http://localhost:8000/api/calendar/disconnect?user_email=${encodeURIComponent(user.email)}`, { method: "DELETE" });
+    setCalendarConnected(false);
+    setCalendarMsg("Google Calendar disconnected.");
+  };
 
   const [displayName, setDisplayName] = useState(user?.fullName || "");
 
@@ -711,6 +758,42 @@ export default function SettingsPage() {
               ) : null}
             </>
           ) : null}
+        </section>
+      ) : null}
+
+      {tab === "integrations" ? (
+        <section className="contained settings-section">
+          <h2 className="page-section-title">Integrations</h2>
+          <p className="page-section-lead">
+            Connect external services. When connected, appointments booked through NexaCare are added automatically.
+          </p>
+
+          <div className="contained settings-nested" style={{ marginTop: "1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+              <div>
+                <strong style={{ fontSize: "1rem" }}>📅 Google Calendar</strong>
+                <p className="page-section-lead" style={{ marginTop: "0.25rem", marginBottom: 0 }}>
+                  {calendarConnected === null
+                    ? "Checking status…"
+                    : calendarConnected
+                    ? "Connected — new appointments are added to your calendar automatically."
+                    : "Not connected — connect to auto-add bookings to your Google Calendar."}
+                </p>
+              </div>
+              <div className="button-row">
+                {calendarConnected ? (
+                  <button className="secondary-btn" type="button" onClick={disconnectCalendar}>
+                    Disconnect
+                  </button>
+                ) : (
+                  <button className="primary-btn" type="button" onClick={connectCalendar}>
+                    Connect Google Calendar
+                  </button>
+                )}
+              </div>
+            </div>
+            {calendarMsg ? <p className="auth-hint" style={{ marginTop: "0.75rem" }}>{calendarMsg}</p> : null}
+          </div>
         </section>
       ) : null}
 
