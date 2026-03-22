@@ -423,17 +423,7 @@ export function AuthProvider({ children }) {
         },
       };
     });
-  }, [
-    persistSessionMeta,
-    user?.familyId,
-    user?.familyRole,
-    user?.accountType,
-    user?.email,
-    user?.workAssignments,
-    user?.enterpriseId,
-    user?.employeeRoleTemplateId,
-    user?.employerAssignmentLocked,
-  ]);
+  }, [persistSessionMeta, user]);
 
   /** Owned enterprises (user doc) + shared directory (Firestore session meta) for linked employers. */
   const resolvedEnterprises = useMemo(() => {
