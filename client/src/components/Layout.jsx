@@ -18,7 +18,7 @@ const navItems = [
 
 export default function Layout() {
   const navigate = useNavigate();
-  const { user, logout, showOnboardingOverlay, benefitDashboardSummary } = useAuth();
+  const { user, logout, showOnboardingOverlay, effectiveInsurers } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [notification, setNotification] = useState(null);
 
@@ -31,21 +31,24 @@ export default function Layout() {
       .catch(() => {});
   }, [user?.email]);
 
-  // Map real benefits from AuthContext
+  // Map real benefits from effectiveInsurers (flatten all categories)
   const mappedBenefits = useMemo(() => {
-    const cats = benefitDashboardSummary?.categories;
-    if (!cats?.length) return null;
-    const find = (key) => cats.find((c) => c.key === key || c.label?.toLowerCase().includes(key));
+    const allCats = (effectiveInsurers ?? []).flatMap((i) => i.categories ?? []);
+    if (!allCats.length) return null;
+    const find = (key) =>
+      allCats.find((c) =>
+        (c.key ?? c.label ?? "").toLowerCase().includes(key)
+      );
     const dental = find("dental");
     const vision = find("vision");
     const physio = find("physio") || find("physiotherapy");
     if (!dental && !vision && !physio) return null;
     return {
-      dental: { total: dental?.total ?? 0, used: dental?.used ?? 0 },
-      vision: { total: vision?.total ?? 0, used: vision?.used ?? 0 },
-      physio: { total: physio?.total ?? 0, used: physio?.used ?? 0 },
+      dental: { total: dental?.annualLimit ?? 0, used: dental?.used ?? 0 },
+      vision: { total: vision?.annualLimit ?? 0, used: vision?.used ?? 0 },
+      physio: { total: physio?.annualLimit ?? 0, used: physio?.used ?? 0 },
     };
-  }, [benefitDashboardSummary]);
+  }, [effectiveInsurers]);
 
   const visibleNavItems = useMemo(
     () =>
