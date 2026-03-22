@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Calendar } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { createDefaultManualProvider } from "../lib/manualBenefitDefaults";
 import { useSearchParams } from "react-router-dom";
@@ -771,7 +772,10 @@ export default function SettingsPage() {
           <div className="contained settings-nested" style={{ marginTop: "1rem" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
               <div>
-                <strong style={{ fontSize: "1rem" }}>📅 Google Calendar</strong>
+                <strong style={{ fontSize: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Calendar size={18} strokeWidth={1.75} />
+                  Google Calendar
+                </strong>
                 <p className="page-section-lead" style={{ marginTop: "0.25rem", marginBottom: 0 }}>
                   {calendarConnected === null
                     ? "Checking status…"
