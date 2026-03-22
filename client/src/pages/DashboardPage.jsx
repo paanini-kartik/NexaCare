@@ -155,8 +155,8 @@ function MemberBenefitsSummaryCard({ benefits }) {
         <>
           <h3 style={{ marginBottom: "0.5rem" }}>—</h3>
           <div className="wallet-metrics">
-            <span>No plan categories yet</span>
-            <span>Add employer keys or manual providers in Settings to see your coverage here.</span>
+            <span>No plans connected yet</span>
+            <span>Add your work invite code or plans in Settings to see coverage here.</span>
           </div>
         </>
       )}
@@ -187,10 +187,10 @@ function EmployerProgramSummaryCard() {
         <li>Dental: ${summary.byLine.Dental.toLocaleString()}</li>
         <li>Physical: ${summary.byLine.Physical.toLocaleString()}</li>
       </ul>
-      <p className="wallet-footnote" style={{ marginTop: "0.5rem" }}>
+        <p className="wallet-footnote" style={{ marginTop: "0.5rem" }}>
         {myEnterprise?.name
-          ? <>Configured in <strong>Employer Hub</strong> for <strong>{myEnterprise.name}</strong>.</>
-          : <>Link an organization in Employer Hub to configure role templates.</>}
+          ? <>Totals for <strong>{myEnterprise.name}</strong>—manage roles and rates in <strong>Employer hub</strong>.</>
+          : <>Open <strong>Employer hub</strong> to link your organization and set up roles.</>}
       </p>
     </section>
   );
@@ -203,7 +203,7 @@ function OnboardingRibbon({ steps, stepComplete }) {
     <section className="onboarding-vibe onboarding-vibe--beside-benefits" aria-labelledby="dash-onboard-heading">
       <div className="onboarding-vibe-head">
         <h2 id="dash-onboard-heading" className="title-vibe">Get set up</h2>
-        <p>Tap a step to continue.</p>
+        <p>Choose a step to continue.</p>
       </div>
       <div className="step-chip-track step-chip-track--grid">
         {steps.map((step, index) => {
@@ -302,7 +302,7 @@ function UpcomingAppointments({ appointments, userEmail }) {
           <CalendarDays size={28} strokeWidth={1.5} />
           <div>
             <strong>No upcoming appointments</strong>
-            <p>Ask the AI assistant to book one, or browse clinics on the Health Compass.</p>
+            <p>Use the assistant to book, or browse clinics in Health Compass.</p>
           </div>
           <button className="primary-btn" type="button" onClick={() => navigate("/health-compass")}>
             Find a clinic
@@ -391,8 +391,7 @@ function AIRecommendations({ user, benefits, appointments }) {
   return (
     <section className="dash-recs-section dash-recs-section--full" aria-labelledby="dash-recs-heading">
       <div className="dash-section-head dash-section-head--recs">
-        <h2 id="dash-recs-heading" className="title-vibe">Suggested for you</h2>
-        <span className="dash-ai-badge">AI</span>
+        <h2 id="dash-recs-heading" className="title-vibe">Suggestions for you</h2>
       </div>
 
       {loading ? (
@@ -406,7 +405,7 @@ function AIRecommendations({ user, benefits, appointments }) {
           <ShieldCheck size={28} strokeWidth={1.5} />
           <div>
             <strong>You're all caught up</strong>
-            <p>Complete your health profile to get personalized checkup recommendations.</p>
+            <p>Add a bit more to your health profile for tailored suggestions.</p>
           </div>
         </div>
       ) : (
@@ -488,7 +487,7 @@ export default function DashboardPage() {
   const nextAppt = upcoming[0];
   const contextLine = nextAppt
     ? `Your next appointment is ${new Date(nextAppt.date).toLocaleDateString("en-CA", { month: "long", day: "numeric" })} at ${nextAppt.clinicName}.`
-    : "No upcoming appointments — ask the AI assistant to book one.";
+    : "No upcoming appointments on file.";
 
   const memberExtraActions = [
     { id: "upload", label: "Upload Insurance PDF", IconComponent: Paperclip, onClick: () => {} },
@@ -508,7 +507,7 @@ export default function DashboardPage() {
         </h1>
         <p className="dashboard-launch-sub">
           {isEmployer
-            ? "Organization overview — benefit templates and role keys for your workers."
+            ? "Benefit programs and invite codes for your team—manage details in Employer hub."
             : contextLine}
         </p>
       </header>
@@ -554,7 +553,7 @@ export default function DashboardPage() {
         <div className="dashboard-lower dashboard-lower--alive dashboard-lower--employer-only">
           <section className="insights-vibe" aria-labelledby="dash-insights-heading">
             <h2 id="dash-insights-heading" className="title-vibe">Organization</h2>
-            <p className="insights-vibe-lead">Member-facing health tools stay on employee accounts. Manage benefit templates and keys from Employer Hub and Settings.</p>
+            <p className="insights-vibe-lead">Employees use their own accounts for care and benefits. Configure programs and codes in Employer hub and Settings.</p>
           </section>
         </div>
       )}

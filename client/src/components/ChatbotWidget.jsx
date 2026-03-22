@@ -547,7 +547,7 @@ export default function ChatbotWidget({
 
   const welcomeMessage = {
     from: "bot",
-    text: `Hi ${firstName}! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
+    text: `Hi ${firstName}. I can help with benefits, appointments, and finding your way around NexaCare. What would you like to do?`,
   };
 
   const [messages, setMessages] = useState([welcomeMessage]);

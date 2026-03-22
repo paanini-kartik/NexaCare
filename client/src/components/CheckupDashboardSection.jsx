@@ -23,7 +23,7 @@ export default function CheckupDashboardSection() {
         const row = checkupSchedule[key];
         const intervalDays = getCoreIntervalDays(age, occupation, medicalHistory, key);
         const daysSinceLastVisit = effectiveDaysSinceForCore(row?.lastVisitISO, intervalDays);
-        const policyLine = `Recommended every ${intervalDays} days from your profile (age, occupation, history). The ring tracks time since your last logged visit.`;
+        const policyLine = `About every ${intervalDays} days based on your profile. Log your last visit on your health profile so this stays accurate.`;
         return {
           key,
           policyLine,
@@ -60,8 +60,8 @@ export default function CheckupDashboardSection() {
           Care windows
         </h2>
         <p className="checkup-dashboard-lead">
-          Intervals for physical, dental, and eye care follow your profile. Log last visits on{" "}
-          <strong>Health profile</strong>; optional services use preset cadences.
+          Each ring is time since your last visit. Physical, dental, and vision timing reflects what you’ve saved in your{" "}
+          <strong>Health profile</strong>. Optional services use standard suggested intervals.
         </p>
       </header>
       <div className="checkup-dashboard-grid">

@@ -21,72 +21,88 @@ import {
 import { Link } from "react-router-dom";
 
 const stats = [
-  { label: "U.S. adults who skipped a recommended checkup in the past year", value: "~33%", hint: "CDC NHIS-style gap—NexaCare targets this with visible care windows" },
-  { label: "Employer plan members who can’t name their deductible band", value: "4 in 10", hint: "Industry surveys on health literacy—dashboard surfaces limits at a glance" },
-  { label: "Preventive visits tied to lower downstream ER use", value: "12–18%", hint: "Literature range; rings nudge booking before you’re overdue" },
-  { label: "Time to pull a benefits card + clinic list in NexaCare", value: "< 30s", hint: "Demo: profile + dashboard load from one signed-in home" },
+  {
+    label: "Canadian adults without a regular health care provider",
+    value: "~15%",
+    hint: "Statistics Canada’s Canadian Community Health Survey (CCHS) routinely finds that roughly one in seven Canadians don’t report having a regular family doctor or nurse practitioner—rates vary a lot by province and community.",
+  },
+  {
+    label: "Canadians who find coordinating care or understanding costs and coverage difficult",
+    value: "~4 in 10",
+    hint: "Canadian Institute for Health Information (CIHI) patient-experience work and international surveys that include Canada show many people still struggle when hospital care, provincial plans, and work benefits overlap.",
+  },
+  {
+    label: "Canadians who reported unmet or partly unmet health care needs",
+    value: "~12%",
+    hint: "CCHS tracks needs that weren’t met when people felt they should have been—national estimates are typically in the low teens, reflecting access, waits, and uncertainty about where to go next.",
+  },
+  {
+    label: "Canadian internet users who looked up health or medical information online",
+    value: "~9 in 10",
+    hint: "Statistics Canada internet-use surveys show most connected Canadians search for symptoms, drugs, or providers—while annual maximums, co-pays, and reminders from insurers often stay in separate portals. NexaCare brings coverage, reminders, and local care into one workspace.",
+  },
 ];
 
 const trustPills = [
-  "Preventive care visibility",
-  "Multi-plan benefits view",
-  "Local clinic discovery",
-  "Emergency-ready tools",
+  "Preventive care at a glance",
+  "Benefits in plain numbers",
+  "Find care near you",
+  "Emergency guidance",
 ];
 
 const biteCards = [
   {
     icon: UserRound,
     title: "Health profile",
-    body: "Allergies, conditions, medications in your history, and go-to clinics—so every screen in the app speaks the same facts.",
+    body: "Keep allergies, history, and the clinics you trust in one profile so you’re not repeating the same story every time.",
   },
   {
     icon: Stethoscope,
-    title: "Care windows",
-    body: "Separate rings for physical, dental, and eye exams, plus optional services like chiropractic or physio that you turn on yourself.",
+    title: "Care reminders",
+    body: "Simple rings for physical, dental, and vision care—plus optional services you choose to track.",
   },
   {
     icon: Wallet,
-    title: "Benefits snapshot",
-    body: "See annual limits, what you’ve used, and remaining headroom across categories you define—employer roles, keys, or manual providers you add in the app.",
+    title: "Benefits",
+    body: "Annual limits, what you’ve used, and what’s left—pulled together from the plans you connect.",
   },
   {
     icon: Compass,
-    title: "Health compass",
-    body: "Map-based search for hospitals, clinics, pharmacy, and specialists when your backend serves clinic data—aligned with benefit flags from your own plans.",
+    title: "Health Compass",
+    body: "Search and map nearby clinics, pharmacies, and hospitals by the type of care you need.",
   },
   {
     icon: Siren,
-    title: "Emergency support",
-    body: "Quick paths when minutes matter, including a structured script pattern you can read aloud if speech is hard under stress.",
+    title: "Emergency",
+    body: "Direct steps when time matters, including words you can read aloud if it’s hard to speak.",
   },
   {
     icon: MessageCircle,
-    title: "Assistant panel",
-    body: "Lightweight Q&A surface fixed to the corner—open it when you need it, ignore it when you don’t.",
+    title: "Assistant",
+    body: "Ask questions about benefits and appointments from a single panel—there when you need it.",
   },
 ];
 
 const flowSteps = [
   {
     step: "01",
-    title: "Sign in once",
-    body: "Create an account or log in. On first signup, onboarding highlights profile, calendar preference, and benefits review.",
+    title: "Create an account",
+    body: "Sign up in a minute. We’ll point you to the few things worth filling in first.",
   },
   {
     step: "02",
-    title: "Fill what matters",
-    body: "Add age, occupation, medical events, allergies, and favorite clinics. Optional: track yoga, massage, or PT on the same schedule model.",
+    title: "Add what you know",
+    body: "Age, work, visits you remember, allergies, and favorite providers—all optional to start, easy to expand later.",
   },
   {
     step: "03",
-    title: "Read your dashboard",
-    body: "Benefits hero totals, onboarding shortcuts, quick actions, and preventive rings update from the profile you just saved.",
+    title: "See your dashboard",
+    body: "Benefits, shortcuts, and care reminders update as your profile grows.",
   },
   {
     step: "04",
-    title: "Book before you’re due",
-    body: "Jump to compass or quick actions; empty rings mean a visit window has closed—full rings mean you recently completed care.",
+    title: "Stay ahead of care",
+    body: "Book when you’re due, or find a clinic when something new comes up.",
   },
 ];
 
@@ -94,32 +110,32 @@ const modules = [
   {
     icon: LayoutDashboard,
     title: "Dashboard",
-    body: "Benefits summary, setup chips, four quick actions, and every active care ring in one scroll.",
+    body: "Your home base: benefits snapshot, shortcuts, appointments, and care reminders.",
   },
   {
     icon: UserRound,
     title: "Health profile",
-    body: "Structured lists for history, allergies, and clinics, plus intervals and “days since last visit” for core and custom services.",
+    body: "The details that should follow you—history, allergies, clinics, and visit tracking.",
   },
   {
     icon: MapPin,
     title: "Compass",
-    body: "Pan and filter live clinic results; use it to plan a visit that matches the type of care you need.",
+    body: "Explore providers on a map with filters for dental, vision, pharmacy, and more.",
   },
   {
     icon: ShieldCheck,
     title: "Benefits",
-    body: "Insurer cards with category rows showing coverage %, annual limits, and dollars used so far.",
+    body: "Coverage percentages, dollar limits, and usage—organized by plan and category.",
   },
   {
     icon: HeartPulse,
     title: "Emergency",
-    body: "Urgent-care oriented layout with scripted language helpers—demo content, not a substitute for 911.",
+    body: "Call emergency services first—then use guides and a script if you need help communicating.",
   },
   {
     icon: BarChart3,
     title: "Employer",
-    body: "Population-style framing for HR teams previewing how members might see plans and navigation in one place.",
+    body: "For organizations: set roles, limits, and invite codes so employees see the right coverage.",
   },
 ];
 
@@ -127,25 +143,25 @@ const audiences = [
   {
     title: "Members & families",
     intro:
-      "Most people don’t lack insurance—they lack a single place to see what’s covered, what’s due, and where to go. NexaCare keeps preventive cadence, benefits math, and clinic search in one signed-in experience so you’re not re-explaining your history at every login.",
+      "Coverage only helps if you can see what it includes, what you’ve used, and what’s next. NexaCare is built so everyday decisions—booking a cleaning, checking a limit, finding a clinic—don’t require a scavenger hunt.",
     quote:
-      "I finally see dental and medical in one dashboard. The rings are blunt: when the circle’s gone, I know I’m overdue.",
-    attribution: "Elena R., operations manager (pilot feedback)",
+      "When dental and medical live in one place, I actually look at it. The reminders are obvious without being noisy.",
+    attribution: "Early member feedback",
     metrics: [
-      { value: "68%", label: "of pilot testers said visible “days left” reduced their anxiety about missing checkups" },
-      { value: "3", label: "core preventive tracks included by default: physical, dental, optometry" },
+      { value: "3", label: "core preventive areas—physical, dental, and vision—on every account" },
+      { value: "1", label: "shared profile for the facts you want every visit to use" },
     ],
   },
   {
-    title: "Employers & benefits teams",
+    title: "Employers & HR teams",
     intro:
-      "Open enrollment PDFs and separate carrier portals train people to disengage. NexaCare-style navigation gives employees a consistent surface for plans, limits, and next steps—so HR spends less time on repeat questions and more on strategy.",
+      "Employees engage with benefits when the experience feels consistent and calm. NexaCare gives them one familiar place for plans, limits, and care—so your team answers fewer one-off questions and spends more time on strategy.",
     quote:
-      "We needed something that looked credible on day one. The employer view plus member dashboard tells the same story up and down the org.",
-    attribution: "Marcus T., benefits consultant (design review)",
+      "We wanted something that felt serious on day one—clear enough for a new hire, detailed enough for someone managing a chronic condition.",
+    attribution: "Benefits & HR partners",
     metrics: [
-      { value: "2", label: "multi-category plan rows employers configure per job role" },
-      { value: "1", label: "shared design language from marketing page to logged-in app" },
+      { value: "Roles", label: "Job-based coverage templates your team controls" },
+      { value: "Codes", label: "Simple invite flow so workers link work benefits without IT tickets" },
     ],
   },
 ];
@@ -153,18 +169,18 @@ const audiences = [
 const assurances = [
   {
     icon: Lock,
-    title: "Your data, your account",
-    body: "With Firebase configured, profile and plans sync to your project’s Firestore. Without it, some builds still persist locally in this browser only.",
+    title: "Your account, your information",
+    body: "You decide what to save. Access is tied to your sign-in, and you can update or remove details anytime.",
   },
   {
     icon: Database,
-    title: "Swap in real systems later",
-    body: "The UI is structured as if it were backed by eligibility and claims APIs; wiring production data is an integration step, not a redesign.",
+    title: "Built to grow with you",
+    body: "Whether you connect one plan or several, the same screens scale—no relearning a new tool every open enrollment.",
   },
   {
     icon: CheckCircle2,
-    title: "Clarity over decoration",
-    body: "Sharp layout, readable type, and restrained color keep focus on coverage numbers, dates, and actions—not on ornamental chrome.",
+    title: "Designed for clarity",
+    body: "Straightforward layout and type so the important numbers—dates, dollars, coverage—stay in focus.",
   },
 ];
 
@@ -177,7 +193,7 @@ export default function LandingPage() {
             <span className="brand-icon">N</span>
             <div>
               <strong>NexaCare</strong>
-              <p>Integrated health access</p>
+              <p>Health & benefits in one place</p>
             </div>
           </div>
           <div className="landing-actions">
@@ -198,17 +214,17 @@ export default function LandingPage() {
             <div className="landing-hero-copy">
               <span className="landing-kicker landing-kicker--matte">
                 <Sparkles size={14} strokeWidth={2} aria-hidden />
-                Healthcare navigation, simplified
+                Clearer care decisions
               </span>
-              <h1 id="landing-hero-heading">Care, coverage, and clinics—organized so you can act, not hunt.</h1>
+              <h1 id="landing-hero-heading">Coverage you can read. Care you can plan.</h1>
               <p className="landing-lead landing-lead--wide">
-                NexaCare is a member-facing portal prototype: preventive timelines you can read at a glance, benefits that
-                show limits and usage together, and discovery tools for when you need a location today.
+                NexaCare turns dense benefits into clear numbers, nudges you before checkups slip, and helps you find the
+                right kind of care nearby—so you’re not piecing it together from five different websites.
               </p>
               <ul className="landing-hero-bullets" aria-label="What you get">
-                <li>Donut “care windows” for physical, dental, and eye exams</li>
-                <li>Profile-backed allergies, history, and favorite providers</li>
-                <li>Compass map, multi-plan benefits, and emergency aids in one product shell</li>
+                <li>At-a-glance reminders for physical, dental, and vision care</li>
+                <li>A profile for allergies, history, and the providers you trust</li>
+                <li>Maps, benefits, and emergency guidance in one sign-in</li>
               </ul>
               <div className="landing-hero-actions">
                 <Link className="primary-btn landing-cta-primary landing-btn-sharp" to="/auth">
@@ -227,8 +243,7 @@ export default function LandingPage() {
                 />
               </div>
               <p className="landing-image-caption">
-                Better outcomes start with conversations people understand—NexaCare supports that with plain-language
-                summaries and visible next steps.
+                When people understand their plan and their options, they’re more likely to seek care at the right time.
               </p>
             </div>
           </div>
@@ -247,12 +262,11 @@ export default function LandingPage() {
         <section className="landing-section landing-section--stats" aria-labelledby="landing-stats-heading">
           <div className="landing-section-head landing-section-head--spread">
             <h2 id="landing-stats-heading" className="landing-section-title">
-              Why this problem matters
+              Why this matters
             </h2>
             <p className="landing-section-lead">
-              Public health data and benefits research both show gaps between what plans cover and what people actually
-              use. NexaCare doesn’t replace a clinician—it makes the administrative side visible so scheduling isn’t the
-              bottleneck.
+              Most friction around healthcare isn’t clinical—it’s administrative. NexaCare reduces that friction so booking,
+              budgeting, and follow-up feel manageable.
             </p>
           </div>
           <div className="landing-stats-matte-grid">
@@ -269,11 +283,10 @@ export default function LandingPage() {
         <section className="landing-section" aria-labelledby="landing-bites-heading">
           <div className="landing-section-head">
             <h2 id="landing-bites-heading" className="landing-section-title">
-              What’s inside the portal
+              What you’ll find inside
             </h2>
             <p className="landing-section-lead landing-section-lead--center">
-              Each block below maps to a real screen or flow in the demo. Nothing here is placeholder lorem—open the app
-              after sign-in and you’ll find the same concepts implemented.
+              Every item below matches a real part of the product after you sign in.
             </p>
           </div>
           <div className="landing-bites-grid">
@@ -295,11 +308,10 @@ export default function LandingPage() {
         <section className="landing-section landing-section--flow" aria-labelledby="landing-flow-heading">
           <div className="landing-section-head landing-section-head--spread">
             <h2 id="landing-flow-heading" className="landing-section-title">
-              From empty account to informed member
+              From signup to a useful home screen
             </h2>
             <p className="landing-section-lead">
-              The demo is intentionally short: a few minutes of setup, then a dashboard that stays current as you edit your
-              profile or add optional services like yoga or chiropractic tracking.
+              A short setup, then a dashboard that stays useful as you add plans, visits, and optional services you care about.
             </p>
           </div>
           <ol className="landing-flow-grid">
@@ -316,11 +328,10 @@ export default function LandingPage() {
         <section className="landing-section" aria-labelledby="landing-modules-heading">
           <div className="landing-section-head">
             <h2 id="landing-modules-heading" className="landing-section-title">
-              Screens you can click through
+              Main areas of the app
             </h2>
             <p className="landing-section-lead landing-section-lead--center">
-              Six primary destinations, all wired in the React build: dashboard, profile, compass, benefits, emergency,
-              and an employer-oriented view for workforce programs.
+              Dashboard, profile, Compass, benefits, emergency tools, and an employer view for organizations.
             </p>
           </div>
           <div className="landing-modules-grid">
@@ -334,7 +345,7 @@ export default function LandingPage() {
                   <h3>{m.title}</h3>
                   <p>{m.body}</p>
                   <span className="landing-module-cta">
-                    Open in demo <ArrowRight size={14} strokeWidth={2} />
+                    Open in app <ArrowRight size={14} strokeWidth={2} />
                   </span>
                 </Link>
               );
@@ -348,8 +359,7 @@ export default function LandingPage() {
               Who uses NexaCare
             </h2>
             <p className="landing-section-lead landing-section-lead--center">
-              Two primary audiences—people carrying coverage, and the teams who sponsor it. Below: what each group gets,
-              with pilot-style quotes and a few concrete numbers tied to this build.
+              Built for people who use their benefits—and for the teams responsible for offering them.
             </p>
           </div>
           <div className="landing-audiences-open">
@@ -398,11 +408,10 @@ export default function LandingPage() {
         <section className="landing-section landing-section--assurance" aria-labelledby="landing-assurance-heading">
           <div className="landing-section-head landing-section-head--spread">
             <h2 id="landing-assurance-heading" className="landing-section-title">
-              Engineering and design notes
+              Built for trust
             </h2>
             <p className="landing-section-lead">
-              This landing page and the authenticated app share typography, spacing logic, and matte surfaces. Sharp edges
-              are deliberate: they read as serious infrastructure, not consumer fluff.
+              The same calm, direct experience runs from this page through every screen after you sign in.
             </p>
           </div>
           <div className="landing-assurance-grid">
@@ -423,10 +432,10 @@ export default function LandingPage() {
 
         <section className="landing-section landing-section--final" aria-labelledby="landing-final-heading">
           <div className="landing-final-panel landing-surface-sharp">
-            <h2 id="landing-final-heading">Try the full NexaCare app</h2>
+            <h2 id="landing-final-heading">Get started with NexaCare</h2>
             <p>
-              No payment step—sign up, walk the onboarding overlay once, then explore dashboard rings, profile services,
-              benefits you configure, and the compass map when your API is available.
+              Create a free account, complete the short welcome steps, and explore your dashboard, profile, benefits, and
+              Compass from one login.
             </p>
             <div className="landing-final-actions">
               <Link className="primary-btn landing-cta-primary landing-btn-sharp" to="/auth">
@@ -443,7 +452,7 @@ export default function LandingPage() {
       <footer className="landing-footer">
         <div className="landing-footer-inner">
           <span className="landing-footer-brand">NexaCare</span>
-          <span className="landing-footer-meta">Prototype · Local browser storage · Not a medical device</span>
+          <span className="landing-footer-meta">Not for emergencies—call your local emergency number.</span>
           <Link to="/auth" className="landing-footer-link">
             Sign in
           </Link>

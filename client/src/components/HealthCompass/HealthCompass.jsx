@@ -162,12 +162,12 @@ export default function HealthCompass() {
 
         if (!isCancelled) {
           setClinicsSource(mapped);
-          setLoadMessage("Showing live clinics from API.");
+          setLoadMessage("Showing clinics near you.");
         }
       } catch {
         if (!isCancelled) {
           setClinicsSource(clinicLocations);
-          setLoadMessage("Using local mock clinics. Start backend to load live data.");
+          setLoadMessage("Showing sample locations. Live search will appear when the service is available.");
         }
       } finally {
         if (!isCancelled) {
@@ -270,8 +270,8 @@ export default function HealthCompass() {
 
       <div className="health-compass-layout">
         <section className="card-surface health-compass-map">
-          <h3>Health Compass Map</h3>
-          <p>Tap a pin to view details and sync with the clinic panel.</p>
+          <h3>Map</h3>
+          <p>Select a marker to see details. The list on the right stays in sync.</p>
           <div className="health-compass-map-meta">
             {isLoading ? (
               <p>Loading {activeFilter === "pharmacy" ? "pharmacies" : activeFilter === "hospital" ? "hospitals" : activeFilter === "dental" ? "dental clinics" : activeFilter === "vision" ? "vision centers" : "locations"}...</p>
@@ -428,7 +428,7 @@ export default function HealthCompass() {
 
               <div style={{ marginTop: "1.5rem", borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
                 <span className={`pill ${selectedClinic.benefits ? "ok" : "plain"}`}>
-                  {selectedClinic.benefits ? "Accepts NexaCare Benefits" : "Self-pay / Out of network"}
+                  {selectedClinic.benefits ? "In-network for your plan" : "Out of network or self-pay"}
                 </span>
                 {selectedClinic.acceptedBenefits?.length > 0 && (
                   <p style={{ fontSize: "0.85rem", color: "#64748b", marginTop: "0.5rem" }}>
