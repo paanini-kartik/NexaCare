@@ -204,8 +204,8 @@ export default function HealthProfilePage() {
       <header className="page-hero page-hero--alive profile-hero-tight">
         <h1>Health profile</h1>
         <p>
-          Cadence for preventive care is inferred from what you enter below. Log last visits so dashboard rings stay
-          accurate—no manual interval fields.
+          What you save here shapes reminders on your dashboard. Log visits when you can—it keeps your care timeline
+          honest.
         </p>
       </header>
 
@@ -213,7 +213,7 @@ export default function HealthProfilePage() {
         id="cadence-heading"
         icon={CalendarClock}
         title="Your preventive cadence"
-        subtitle="Updates automatically when you change age, occupation, or medical history."
+        subtitle="We adjust suggested intervals when your age, work, or history changes."
       >
         <ul className="recommend-open-list profile-cadence-list">
           {recs.map((rec) => (
@@ -436,7 +436,7 @@ export default function HealthProfilePage() {
           id="wellness-heading"
           icon={HeartPulse}
           title="Visits & optional services"
-          subtitle="Core checkup timing follows your profile. Add services and log last visits so rings stay accurate."
+          subtitle="Log when you last went—your dashboard rings use these dates."
         >
           <div className="profile-section profile-section--wellness profile-section--flush">
           <h4 className="profile-mini-heading">Core checkups — last visit</h4>
@@ -449,7 +449,7 @@ export default function HealthProfilePage() {
                 <div key={key} className="profile-core-row">
                   <div className="profile-core-main">
                     <span className="profile-core-name">{meta.serviceTitle}</span>
-                    <span className="profile-core-hint">Recommended about every {days} days (from profile)</span>
+                    <span className="profile-core-hint">About every {days} days based on what you’ve told us</span>
                   </div>
                   <label className="form-field profile-core-date">
                     Last visit

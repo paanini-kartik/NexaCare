@@ -5,9 +5,7 @@ export default function CompassPage() {
     <div className="page-flow compass-page-flow">
       <header className="page-hero page-hero--alive">
         <h1>Health Compass</h1>
-        <p>
-          Find care near you—search, filter by type, and explore clinics on the map with live pins and details.
-        </p>
+        <p>Search by name or type, then explore clinics on the map and open details when you find a match.</p>
       </header>
 
       <HealthCompass />

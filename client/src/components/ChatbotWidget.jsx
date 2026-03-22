@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { apiUrl, apiFetch } from "../lib/api";
+import { getAppointmentStatus } from "../lib/appointments";
 
 const TOOLS = [
   {
@@ -268,8 +269,8 @@ const TOOLS = [
 ];
 
 function buildSystemPrompt(user, benefits, appointments) {
-  const upcoming = appointments.filter((a) => a.status === "upcoming");
-  const past     = appointments.filter((a) => a.status === "past");
+  const upcoming = appointments.filter((a) => getAppointmentStatus(a) === "upcoming");
+  const past     = appointments.filter((a) => getAppointmentStatus(a) === "past");
 
   const benefitText = (benefits && benefits.hasAny)
     ? `Current benefits:
@@ -309,6 +310,9 @@ SMART ACTIONS — at the end of EVERY response, append exactly:
 Include 2-3 actions that make sense as the obvious next steps given what you just said. Make them specific, not generic. Examples: if you just showed dental balance, offer to book a cleaning or find a dental clinic. If you just booked something, offer to view all appointments or add to calendar.
 
 Rules:
+- Treat the live state snapshot and any tool results as the source of truth. If they conflict with earlier messages in the chat, the live data wins.
+- Before answering questions about current appointments, benefits, health profile, or booking status, call the matching READ tool first instead of relying on memory.
+- After booking or cancelling, re-check appointments before answering follow-up questions about what is scheduled.
 - Keep answers to 2-3 sentences max
 - Be friendly and direct — not clinical
 - Use **bold** for key numbers and dates only
@@ -489,6 +493,7 @@ export default function ChatbotWidget({
   benefits: propBenefits,
   clinics: propClinics,
   onBookAppointment,
+  onRefreshAppointments,
   onUpdateBenefit,
   onShowNotification,
 }) {
@@ -502,11 +507,11 @@ export default function ChatbotWidget({
   } = useAuth();
   const navigate = useNavigate();
 
-  // Build real user object from auth context
+  // Build real user object from auth context + healthProfile (age/occupation live there)
   const realUser = {
     name: authUser?.fullName || authUser?.name || authUser?.displayName || "there",
-    age: authUser?.age ?? null,
-    occupation: authUser?.occupation ?? "patient",
+    age: healthProfile?.age ?? authUser?.age ?? null,
+    occupation: healthProfile?.occupation ?? authUser?.occupation ?? "patient",
     email: authUser?.email ?? "",
     location: { city: "Toronto" },
   };
@@ -531,7 +536,75 @@ export default function ChatbotWidget({
   const systemPromptRef = useRef("");
   useEffect(() => {
     systemPromptRef.current = buildSystemPrompt(realUser, benefits, appointments);
-  }, [benefits, appointments, realUser.name, realUser.email]);
+  }, [appointments, benefits, realUser.age, realUser.email, realUser.name, realUser.occupation]);
+
+  async function getLiveAppointments() {
+    if (onRefreshAppointments) {
+      try {
+        const refreshed = await onRefreshAppointments();
+        if (Array.isArray(refreshed)) {
+          return refreshed;
+        }
+      } catch {
+        // Fall through to the direct fetch below.
+      }
+    }
+
+    if (!realUser.email) {
+      return appointments;
+    }
+
+    try {
+      const response = await apiFetch(`/api/appointments/${encodeURIComponent(realUser.email)}`);
+      if (!response.ok) {
+        return appointments;
+      }
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        return data;
+      }
+    } catch {
+      // Use the last known appointment snapshot if the backend is unavailable.
+    }
+
+    return appointments;
+  }
+
+  function shouldHydrateAppointments(text) {
+    return /\b(appointment|appointments|book|booking|cancel|schedule|scheduled)\b/i.test(text);
+  }
+
+  function shouldHydrateBenefits(text) {
+    return /\b(benefit|benefits|coverage|insurance|plan|dental|vision|physio|physical)\b/i.test(text);
+  }
+
+  function shouldHydrateHealthProfile(text) {
+    return /\b(profile|age|occupation|allerg|medical|history|checkup|clinic|clinics)\b/i.test(text);
+  }
+
+  async function buildLiveTurnContext(text) {
+    const sections = [];
+
+    if (shouldHydrateAppointments(text)) {
+      sections.push(`Appointments: ${JSON.stringify(await getLiveAppointments())}`);
+    }
+    if (shouldHydrateBenefits(text)) {
+      sections.push(`Benefits: ${JSON.stringify(benefits ?? null)}`);
+    }
+    if (shouldHydrateHealthProfile(text)) {
+      sections.push(`Health profile: ${JSON.stringify(healthProfile ?? {})}`);
+    }
+
+    if (!sections.length) {
+      return text;
+    }
+
+    return [
+      "Authoritative live context for this turn. Use this instead of any older conflicting chat memory.",
+      ...sections,
+      `User request: ${text}`,
+    ].join("\n\n");
+  }
 
   const clinics = propClinics ?? [
     { id: "c_01", name: "Smile Dental Studio", type: "dental", lat: 43.6545, lng: -79.3801 },
@@ -547,7 +620,7 @@ export default function ChatbotWidget({
 
   const welcomeMessage = {
     from: "bot",
-    text: `Hi ${firstName}! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
+    text: `Hi ${firstName}. I can help with benefits, appointments, and finding your way around NexaCare. What would you like to do?`,
   };
 
   const [messages, setMessages] = useState([welcomeMessage]);
@@ -657,8 +730,10 @@ export default function ChatbotWidget({
           ? JSON.stringify(benefits)
           : JSON.stringify({ error: "No benefit plans configured. User should visit Settings to add coverage." });
 
-      case "get_appointments":
-        return JSON.stringify(appointments);
+      case "get_appointments": {
+        const liveAppointments = await getLiveAppointments();
+        return JSON.stringify(liveAppointments);
+      }
 
       case "find_clinics": {
         const userLat = 43.6532;
@@ -679,7 +754,7 @@ export default function ChatbotWidget({
       }
 
       case "book_appointment": {
-        const newAppt = {
+        let newAppt = {
           id: `apt_${Date.now()}`,
           type: toolInput.type,
           clinicName: toolInput.clinicName,
@@ -696,16 +771,34 @@ export default function ChatbotWidget({
           const res = await apiFetch("/api/appointments/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(newAppt),
+            body: JSON.stringify({
+              type: newAppt.type,
+              clinicName: newAppt.clinicName,
+              date: newAppt.date,
+              duration: newAppt.duration,
+              status: newAppt.status,
+              userId: newAppt.userId,
+              userName: newAppt.userName,
+              userEmail: newAppt.userEmail,
+            }),
           });
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}));
+            throw new Error(error.detail ?? "Could not save appointment");
+          }
           const data = await res.json();
-          if (data.id) newAppt.id = data.id;
+          if (data.appointment && typeof data.appointment === "object") {
+            newAppt = data.appointment;
+          } else if (data.id) {
+            newAppt = { ...newAppt, id: data.id };
+          }
           console.log("✅ Appointment saved to Firebase:", data.id);
         } catch (err) {
           console.warn("⚠️ Backend unavailable, saving locally only:", err.message);
         }
 
         if (onBookAppointment) onBookAppointment(newAppt);
+        await getLiveAppointments();
         return JSON.stringify({ success: true, appointment: newAppt });
       }
 
@@ -736,15 +829,24 @@ export default function ChatbotWidget({
 
       case "cancel_appointment": {
         const { appointmentId } = toolInput;
+        let cancelled = false;
         try {
-          await apiFetch(`/api/appointments/${appointmentId}`, {
+          const response = await apiFetch(`/api/appointments/${appointmentId}`, {
             method: "DELETE",
           });
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail ?? "Could not cancel appointment");
+          }
+          cancelled = true;
         } catch (err) {
           console.warn("⚠️ Cancel backend unavailable:", err.message);
         }
-        if (onBookAppointment) onBookAppointment({ id: appointmentId, _cancelled: true });
-        return JSON.stringify({ success: true, cancelled: appointmentId });
+        if (cancelled) {
+          if (onBookAppointment) onBookAppointment({ id: appointmentId, _cancelled: true });
+          await getLiveAppointments();
+        }
+        return JSON.stringify({ success: cancelled, cancelled: appointmentId });
       }
 
       // ── NEW HIGH-PRIORITY TOOLS ─────────────────────────────────────
@@ -936,6 +1038,9 @@ export default function ChatbotWidget({
   }
 
   async function callAPI(apiMessages) {
+    const liveAppointments = await getLiveAppointments();
+    const systemPrompt = buildSystemPrompt(realUser, benefits, liveAppointments);
+    systemPromptRef.current = systemPrompt;
     const response = await fetch(apiUrl("/api/ai/chat"), {
       method: "POST",
       headers: {
@@ -943,7 +1048,7 @@ export default function ChatbotWidget({
       },
       body: JSON.stringify({
         max_tokens: 1024,
-        system: systemPromptRef.current || buildSystemPrompt(realUser, benefits, appointments),
+        system: systemPrompt,
         tools: TOOLS,
         messages: apiMessages,
       }),
@@ -963,7 +1068,8 @@ export default function ChatbotWidget({
     setMessages((prev) => [...prev, { from: "user", text }]);
     setLoading(true);
 
-    let currentHistory = [...history, { role: "user", content: text }];
+    const userMessageContent = await buildLiveTurnContext(text);
+    let currentHistory = [...history, { role: "user", content: userMessageContent }];
 
     try {
       let data = await callAPI(currentHistory);

@@ -17,10 +17,11 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import CheckupDashboardSection from "../components/CheckupDashboardSection";
 import { useAuth } from "../contexts/AuthContext";
 import { apiFetch, apiUrl } from "../lib/api";
+import { getAppointmentStatus, sortAppointmentsByDate } from "../lib/appointments";
 import { isMemberDashboardOnboardingDismissedSession } from "../lib/memberDashboardOnboarding";
 import {
   employerOnboardingSteps,
@@ -55,9 +56,9 @@ function getGreeting() {
 
 // ── Stats bar ────────────────────────────────────────────────────────────────
 function StatsBar({ appointments, benefits }) {
-  const upcoming = (appointments ?? [])
-    .filter((a) => a.status === "upcoming")
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  const upcoming = sortAppointmentsByDate(
+    (appointments ?? []).filter((a) => getAppointmentStatus(a) === "upcoming")
+  );
 
   const nextAppt = upcoming[0];
   const nextApptLabel = nextAppt
@@ -155,8 +156,8 @@ function MemberBenefitsSummaryCard({ benefits }) {
         <>
           <h3 style={{ marginBottom: "0.5rem" }}>—</h3>
           <div className="wallet-metrics">
-            <span>No plan categories yet</span>
-            <span>Add employer keys or manual providers in Settings to see your coverage here.</span>
+            <span>No plans connected yet</span>
+            <span>Add your work invite code or plans in Settings to see coverage here.</span>
           </div>
         </>
       )}
@@ -187,10 +188,10 @@ function EmployerProgramSummaryCard() {
         <li>Dental: ${summary.byLine.Dental.toLocaleString()}</li>
         <li>Physical: ${summary.byLine.Physical.toLocaleString()}</li>
       </ul>
-      <p className="wallet-footnote" style={{ marginTop: "0.5rem" }}>
+        <p className="wallet-footnote" style={{ marginTop: "0.5rem" }}>
         {myEnterprise?.name
-          ? <>Configured in <strong>Employer Hub</strong> for <strong>{myEnterprise.name}</strong>.</>
-          : <>Link an organization in Employer Hub to configure role templates.</>}
+          ? <>Totals for <strong>{myEnterprise.name}</strong>—manage roles and rates in <strong>Employer hub</strong>.</>
+          : <>Open <strong>Employer hub</strong> to link your organization and set up roles.</>}
       </p>
     </section>
   );
@@ -203,7 +204,7 @@ function OnboardingRibbon({ steps, stepComplete }) {
     <section className="onboarding-vibe onboarding-vibe--beside-benefits" aria-labelledby="dash-onboard-heading">
       <div className="onboarding-vibe-head">
         <h2 id="dash-onboard-heading" className="title-vibe">Get set up</h2>
-        <p>Tap a step to continue.</p>
+        <p>Choose a step to continue.</p>
       </div>
       <div className="step-chip-track step-chip-track--grid">
         {steps.map((step, index) => {
@@ -261,21 +262,27 @@ function QuickActionsVivid({ items, extraActions }) {
 }
 
 // ── Upcoming appointments ─────────────────────────────────────────────────────
-function UpcomingAppointments({ appointments, userEmail }) {
+function UpcomingAppointments({ appointments, onRefreshAppointments }) {
   const navigate = useNavigate();
-  const upcoming = (appointments ?? [])
-    .filter((a) => a.status === "upcoming")
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .slice(0, 3);
+  const upcoming = sortAppointmentsByDate(
+    (appointments ?? []).filter((a) => getAppointmentStatus(a) === "upcoming")
+  ).slice(0, 3);
 
   const [cancelling, setCancelling] = useState(null);
 
   const handleCancel = async (id) => {
     setCancelling(id);
     try {
-      await apiFetch(`/api/appointments/${id}`, { method: "DELETE" });
-      window.location.reload();
+      const response = await apiFetch(`/api/appointments/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("Could not cancel appointment");
+      }
+      if (onRefreshAppointments) {
+        await onRefreshAppointments();
+      }
     } catch {
+      // Keep the current card visible if the backend rejects the cancel request.
+    } finally {
       setCancelling(null);
     }
   };
@@ -302,7 +309,7 @@ function UpcomingAppointments({ appointments, userEmail }) {
           <CalendarDays size={28} strokeWidth={1.5} />
           <div>
             <strong>No upcoming appointments</strong>
-            <p>Ask the AI assistant to book one, or browse clinics on the Health Compass.</p>
+            <p>Use the assistant to book, or browse clinics in Health Compass.</p>
           </div>
           <button className="primary-btn" type="button" onClick={() => navigate("/health-compass")}>
             Find a clinic
@@ -348,14 +355,22 @@ function UpcomingAppointments({ appointments, userEmail }) {
 function AIRecommendations({ user, benefits, appointments }) {
   const [recs, setRecs]     = useState(null);
   const [loading, setLoading] = useState(true);
+  const appointmentSignature = JSON.stringify(
+    (appointments ?? []).map((a) => [a.id, a.date, a.status, a.type, a.clinicName])
+  );
+  const benefitSignature = JSON.stringify(benefits ?? null);
 
   useEffect(() => {
-    if (!user?.email) return;
-    const key = `nexacare:recs:${user.email}:${new Date().toDateString()}`;
-    const cached = sessionStorage.getItem(key);
-    if (cached) { setRecs(JSON.parse(cached)); setLoading(false); return; }
+    if (!user?.email) {
+      setRecs([]);
+      setLoading(false);
+      return;
+    }
 
-    const past = (appointments ?? []).filter((a) => a.status === "past");
+    let cancelled = false;
+    setLoading(true);
+
+    const past = (appointments ?? []).filter((a) => getAppointmentStatus(a) === "past");
     const lastDental = past.find((a) => a.type?.toLowerCase().includes("dental"))?.date ?? "never";
     const lastEye    = past.find((a) => a.type?.toLowerCase().includes("vision") || a.type?.toLowerCase().includes("eye"))?.date ?? "never";
     const lastCheckup= past.find((a) => a.type?.toLowerCase().includes("checkup") || a.type?.toLowerCase().includes("general"))?.date ?? "never";
@@ -375,12 +390,21 @@ function AIRecommendations({ user, benefits, appointments }) {
     })
       .then((r) => r.json())
       .then((parsed) => {
-        sessionStorage.setItem(key, JSON.stringify(parsed));
-        setRecs(parsed);
+        if (!cancelled) {
+          setRecs(Array.isArray(parsed) ? parsed : []);
+        }
       })
-      .catch(() => setRecs([]))
-      .finally(() => setLoading(false));
-  }, [user?.email]);
+      .catch(() => {
+        if (!cancelled) setRecs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appointmentSignature, benefitSignature, user?.age, user?.email, user?.occupation]);
 
   const urgencyConfig = {
     high:   { color: "#dc2626", bg: "#fee2e2", Icon: AlertTriangle },
@@ -391,8 +415,7 @@ function AIRecommendations({ user, benefits, appointments }) {
   return (
     <section className="dash-recs-section dash-recs-section--full" aria-labelledby="dash-recs-heading">
       <div className="dash-section-head dash-section-head--recs">
-        <h2 id="dash-recs-heading" className="title-vibe">Suggested for you</h2>
-        <span className="dash-ai-badge">AI</span>
+        <h2 id="dash-recs-heading" className="title-vibe">Suggestions for you</h2>
       </div>
 
       {loading ? (
@@ -406,7 +429,7 @@ function AIRecommendations({ user, benefits, appointments }) {
           <ShieldCheck size={28} strokeWidth={1.5} />
           <div>
             <strong>You're all caught up</strong>
-            <p>Complete your health profile to get personalized checkup recommendations.</p>
+            <p>Add a bit more to your health profile for tailored suggestions.</p>
           </div>
         </div>
       ) : (
@@ -439,6 +462,9 @@ function AIRecommendations({ user, benefits, appointments }) {
 export default function DashboardPage() {
   const { user, healthProfile, effectiveInsurers } = useAuth();
   const navigate = useNavigate();
+  const outletContext = useOutletContext() ?? {};
+  const appointments = outletContext.appointments ?? [];
+  const refreshAppointments = outletContext.refreshAppointments;
 
   const isEmployer = user?.accountType === "employer";
   const sessionDismissed = !isEmployer && isMemberDashboardOnboardingDismissedSession();
@@ -450,16 +476,6 @@ export default function DashboardPage() {
     Boolean(healthProfile.onboardingCalendarConnected),
     false,
   ];
-
-  // Fetch real appointments
-  const [appointments, setAppointments] = useState([]);
-  useEffect(() => {
-    if (!user?.email) return;
-    apiFetch(`/api/appointments/${encodeURIComponent(user.email)}`)
-      .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setAppointments(d); })
-      .catch(() => {});
-  }, [user?.email]);
 
   // Map benefits from effectiveInsurers
   const benefits = (() => {
@@ -483,12 +499,13 @@ export default function DashboardPage() {
   const firstName = (user?.fullName || user?.name || "there").split(" ")[0];
   const greeting  = getGreeting();
 
-  const upcoming = appointments.filter((a) => a.status === "upcoming")
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  const upcoming = sortAppointmentsByDate(
+    appointments.filter((a) => getAppointmentStatus(a) === "upcoming")
+  );
   const nextAppt = upcoming[0];
   const contextLine = nextAppt
     ? `Your next appointment is ${new Date(nextAppt.date).toLocaleDateString("en-CA", { month: "long", day: "numeric" })} at ${nextAppt.clinicName}.`
-    : "No upcoming appointments — ask the AI assistant to book one.";
+    : "No upcoming appointments on file.";
 
   const memberExtraActions = [
     { id: "upload", label: "Upload Insurance PDF", IconComponent: Paperclip, onClick: () => {} },
@@ -508,7 +525,7 @@ export default function DashboardPage() {
         </h1>
         <p className="dashboard-launch-sub">
           {isEmployer
-            ? "Organization overview — benefit templates and role keys for your workers."
+            ? "Benefit programs and invite codes for your team—manage details in Employer hub."
             : contextLine}
         </p>
       </header>
@@ -535,7 +552,7 @@ export default function DashboardPage() {
 
       {/* ── Upcoming appointments ── */}
       {!isEmployer && (
-        <UpcomingAppointments appointments={appointments} userEmail={user?.email} />
+        <UpcomingAppointments appointments={appointments} onRefreshAppointments={refreshAppointments} />
       )}
 
       {/* ── Checkup section (care windows, centered) ── */}
@@ -554,7 +571,7 @@ export default function DashboardPage() {
         <div className="dashboard-lower dashboard-lower--alive dashboard-lower--employer-only">
           <section className="insights-vibe" aria-labelledby="dash-insights-heading">
             <h2 id="dash-insights-heading" className="title-vibe">Organization</h2>
-            <p className="insights-vibe-lead">Member-facing health tools stay on employee accounts. Manage benefit templates and keys from Employer Hub and Settings.</p>
+            <p className="insights-vibe-lead">Employees use their own accounts for care and benefits. Configure programs and codes in Employer hub and Settings.</p>
           </section>
         </div>
       )}

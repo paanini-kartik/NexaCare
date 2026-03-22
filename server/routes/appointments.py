@@ -86,7 +86,7 @@ def send_confirmation_emails(appt: dict):
 def get_appointments(user_id: str):
     try:
         appointments = db.collection("appointments").where("userId", "==", user_id).stream()
-        return [{"id": a.id, **a.to_dict()} for a in appointments]
+        return [{**a.to_dict(), "id": a.id} for a in appointments]
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -94,21 +94,25 @@ def get_appointments(user_id: str):
 @router.post("/")
 def create_appointment(appointment: dict):
     try:
-        doc = db.collection("appointments").add(appointment)
-        appt_id = doc[1].id
-        saved = {"id": appt_id, **appointment}
+        clean_appointment = {k: v for k, v in appointment.items() if k != "id"}
+        clean_appointment.setdefault("status", "upcoming")
+
+        doc_ref = db.collection("appointments").document()
+        doc_ref.set(clean_appointment)
+        appt_id = doc_ref.id
+        saved = {**clean_appointment, "id": appt_id}
 
         # Fire confirmation emails — non-blocking, won't fail the request
-        send_confirmation_emails(appointment)
+        send_confirmation_emails(saved)
 
         # Auto-add to Google Calendar if user has connected it
         try:
             add_calendar_event({
-                "userEmail":  appointment.get("userEmail", ""),
-                "type":       appointment.get("type", "Appointment"),
-                "clinicName": appointment.get("clinicName", ""),
-                "date":       appointment.get("date", ""),
-                "duration":   appointment.get("duration", 45),
+                "userEmail":  saved.get("userEmail", ""),
+                "type":       saved.get("type", "Appointment"),
+                "clinicName": saved.get("clinicName", ""),
+                "date":       saved.get("date", ""),
+                "duration":   saved.get("duration", 45),
             })
         except Exception as cal_err:
             print(f"⚠️  Calendar auto-add skipped: {cal_err}")
@@ -121,7 +125,12 @@ def create_appointment(appointment: dict):
 @router.delete("/{appointment_id}")
 def cancel_appointment(appointment_id: str):
     try:
-        db.collection("appointments").document(appointment_id).delete()
+        doc_ref = db.collection("appointments").document(appointment_id)
+        if not doc_ref.get().exists:
+            raise HTTPException(status_code=404, detail="Appointment not found")
+        doc_ref.delete()
         return {"success": True, "cancelled": appointment_id}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

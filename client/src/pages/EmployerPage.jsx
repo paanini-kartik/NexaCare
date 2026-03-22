@@ -172,8 +172,8 @@ export default function EmployerPage() {
         <header className="page-hero page-hero--alive">
           <h1>Employer hub</h1>
           <p>
-            No organization is linked to this employer account yet. At sign-up, choosing <strong>Yes</strong> for{" "}
-            <strong>Firm role manager (employer)</strong> creates one automatically.
+            No organization is linked to this sign-in yet. If you manage benefits for a company, use the employer option when
+            you create your account. Everyone else can use a standard member account.
           </p>
         </header>
       </div>
@@ -188,9 +188,8 @@ export default function EmployerPage() {
       <header className="page-hero page-hero--alive">
         <h1>Employer hub</h1>
         <p>
-          {org.name} — manage job roles and employer-set benefit rates. Edits apply everywhere that role is assigned,
-          including family members linked through invite keys. Invite keys are created automatically for each role;
-          copy them from <strong>Settings → Connections</strong>.
+          {org.name}: set benefit limits by job role. Changes apply for everyone assigned that role—including family members
+          who joined with a work code. Invite codes for each role are under <strong>Settings → Connections</strong>.
         </p>
       </header>
 
@@ -215,7 +214,7 @@ export default function EmployerPage() {
       {tab === "overview" ? (
         <section className="contained employer-form-panel">
           <h2 className="page-section-title">Organization</h2>
-          <p className="page-section-lead">Preview how members see benefits when they use a specific role.</p>
+          <p className="page-section-lead">See roughly what someone in each role will see for benefits.</p>
           <div className="form-grid">
             <label className="form-field">
               Benefit preview role

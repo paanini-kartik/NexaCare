@@ -1,37 +1,37 @@
-/** Onboarding, quick actions, and Health Compass fallback pins (mock clinics). Benefit/news demo data removed elsewhere. */
+/** Onboarding, quick actions, and Health Compass fallback pins. */
 
 export const onboardingSlides = [
   {
-    title: "Welcome to your health command center",
-    body: "Track appointments, benefits, and emergency support from one workspace.",
+    title: "Welcome to NexaCare",
+    body: "Your dashboard brings together appointments, benefits, and the information you choose to save—so you spend less time hunting through portals.",
   },
   {
-    title: "Share only what you are comfortable with",
-    body: "Your profile powers checkup reminders and suggestions from information you enter.",
+    title: "You’re in control of what you share",
+    body: "What you add to your profile helps us show useful reminders and summaries. You can update it whenever you like.",
   },
   {
-    title: "Ready when urgency happens",
-    body: "Fast emergency actions and a script you can show or read aloud when speech is difficult.",
+    title: "If you ever need help in a hurry",
+    body: "The Emergency section is there for clear next steps—including wording you can read aloud if it’s hard to speak.",
   },
 ];
 
 export const onboardingSteps = [
   {
     id: "profile",
-    title: "Complete Health Profile",
-    description: "Add your age in Health Profile to unlock step 1 (you can add more detail anytime).",
+    title: "Add your health profile",
+    description: "Start with basics like age; you can fill in the rest over time.",
     route: "/health-profile",
   },
   {
     id: "calendar",
-    title: "Connect Calendar Preference",
-    description: "Choose Google, Outlook, or Apple for future scheduling features.",
+    title: "Pick your calendar",
+    description: "Choose the calendar you use most—we’ll use it when scheduling features are available.",
     route: "/health-profile",
   },
   {
     id: "benefits",
-    title: "Review Benefits Setup",
-    description: "Link employer keys or add providers in Settings when you are ready.",
+    title: "Connect your benefits",
+    description: "Add a work invite code or your plans in Settings so your coverage shows up here.",
     route: "/benefits",
   },
 ];
@@ -90,20 +90,20 @@ export const quickActions = [
 export const employerOnboardingSteps = [
   {
     id: "roles",
-    title: "Job roles & rates",
-    description: "Each role includes Optometry, Dental, and Physical—set limits workers receive through invite keys.",
+    title: "Set up job roles",
+    description: "Define coverage and limits by role so each employee gets the right plan.",
     route: "/employer",
   },
   {
     id: "keys",
-    title: "Invite keys",
-    description: "Copy EMP- keys under Settings → Connections for employees to link their work plan.",
+    title: "Share invite codes",
+    description: "Employees enter their code once in Settings to link their work benefits.",
     route: "/settings",
   },
   {
     id: "compass",
-    title: "Health Compass",
-    description: "Browse nearby clinics when you need a reference map—optional for your organization.",
+    title: "Find care nearby",
+    description: "Use Health Compass to look up clinics and pharmacies when you need a starting point.",
     route: "/health-compass",
   },
 ];
