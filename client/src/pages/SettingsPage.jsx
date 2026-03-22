@@ -3,6 +3,7 @@ import { Calendar } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { createDefaultManualProvider } from "../lib/manualBenefitDefaults";
 import { useSearchParams } from "react-router-dom";
+import { apiFetch } from "../lib/api";
 
 function normEmail(email) {
   return String(email || "")
@@ -165,7 +166,7 @@ export default function SettingsPage() {
       setTab("integrations");
     }
     // Check current status from backend
-    fetch(`http://localhost:8000/api/calendar/status?user_email=${encodeURIComponent(user.email)}`)
+    apiFetch(`/api/calendar/status?user_email=${encodeURIComponent(user.email)}`)
       .then((r) => r.json())
       .then((d) => setCalendarConnected(d.connected))
       .catch(() => setCalendarConnected(false));
@@ -174,7 +175,7 @@ export default function SettingsPage() {
   const connectCalendar = async () => {
     if (!user?.email) return;
     try {
-      const res  = await fetch(`http://localhost:8000/api/calendar/auth-url?user_email=${encodeURIComponent(user.email)}`);
+      const res  = await apiFetch(`/api/calendar/auth-url?user_email=${encodeURIComponent(user.email)}`);
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;
@@ -188,7 +189,7 @@ export default function SettingsPage() {
 
   const disconnectCalendar = async () => {
     if (!user?.email) return;
-    await fetch(`http://localhost:8000/api/calendar/disconnect?user_email=${encodeURIComponent(user.email)}`, { method: "DELETE" });
+    await apiFetch(`/api/calendar/disconnect?user_email=${encodeURIComponent(user.email)}`, { method: "DELETE" });
     setCalendarConnected(false);
     setCalendarMsg("Google Calendar disconnected.");
   };

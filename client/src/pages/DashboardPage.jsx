@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import CheckupDashboardSection from "../components/CheckupDashboardSection";
 import { useAuth } from "../contexts/AuthContext";
+import { apiFetch, apiUrl } from "../lib/api";
 import { isMemberDashboardOnboardingDismissedSession } from "../lib/memberDashboardOnboarding";
 import {
   employerOnboardingSteps,
@@ -272,7 +273,7 @@ function UpcomingAppointments({ appointments, userEmail }) {
   const handleCancel = async (id) => {
     setCancelling(id);
     try {
-      await fetch(`http://localhost:8000/api/appointments/${id}`, { method: "DELETE" });
+      await apiFetch(`/api/appointments/${id}`, { method: "DELETE" });
       window.location.reload();
     } catch {
       setCancelling(null);
@@ -359,36 +360,21 @@ function AIRecommendations({ user, benefits, appointments }) {
     const lastEye    = past.find((a) => a.type?.toLowerCase().includes("vision") || a.type?.toLowerCase().includes("eye"))?.date ?? "never";
     const lastCheckup= past.find((a) => a.type?.toLowerCase().includes("checkup") || a.type?.toLowerCase().includes("general"))?.date ?? "never";
 
-    const prompt = `Based on this user profile:
-- Age: ${user.age ?? "unknown"}, Occupation: ${user.occupation ?? "unknown"}
-- Last dental visit: ${lastDental}
-- Last eye exam: ${lastEye}
-- Last general checkup: ${lastCheckup}
-- Unused dental: $${(benefits?.dental?.total ?? 0) - (benefits?.dental?.used ?? 0)}, unused vision: $${(benefits?.vision?.total ?? 0) - (benefits?.vision?.used ?? 0)}
-
-What checkups should this user book soon?
-Return ONLY a JSON array, no other text. Each item: { "type": string, "reason": string, "urgency": "low"|"medium"|"high" }
-Return 3 recommendations maximum.`;
-
-    fetch("https://api.anthropic.com/v1/messages", {
+    apiFetch("/api/ai/recommendations", {
       method: "POST",
-      headers: {
-        "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-        "content-type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 512,
-        messages: [{ role: "user", content: prompt }],
+        age: user.age ?? null,
+        occupation: user.occupation ?? "unknown",
+        lastDental,
+        lastEye,
+        lastCheckup,
+        unusedDental: (benefits?.dental?.total ?? 0) - (benefits?.dental?.used ?? 0),
+        unusedVision: (benefits?.vision?.total ?? 0) - (benefits?.vision?.used ?? 0),
       }),
     })
       .then((r) => r.json())
-      .then((data) => {
-        const text = data.content?.[0]?.text ?? "[]";
-        const json = text.match(/\[[\s\S]*\]/)?.[0] ?? "[]";
-        const parsed = JSON.parse(json);
+      .then((parsed) => {
         sessionStorage.setItem(key, JSON.stringify(parsed));
         setRecs(parsed);
       })
@@ -469,7 +455,7 @@ export default function DashboardPage() {
   const [appointments, setAppointments] = useState([]);
   useEffect(() => {
     if (!user?.email) return;
-    fetch(`http://localhost:8000/api/appointments/${encodeURIComponent(user.email)}`)
+    apiFetch(`/api/appointments/${encodeURIComponent(user.email)}`)
       .then((r) => r.json())
       .then((d) => { if (Array.isArray(d)) setAppointments(d); })
       .catch(() => {});
