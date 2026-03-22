@@ -267,7 +267,13 @@ function buildSystemPrompt(user, benefits, appointments) {
 - Physiotherapy/Physical: $${benefits.physio.used} used of $${benefits.physio.total} ($${benefits.physio.total - benefits.physio.used} remaining)`
     : "Benefits: This user has not configured any benefit plans yet. Direct them to Settings > Benefits to add their coverage.";
 
+  const todayStr = new Date().toLocaleDateString("en-CA", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+
   return `You are a personal health assistant for ${user.name}${user.age ? `, a ${user.age}-year-old` : ""}${user.occupation && user.occupation !== "patient" ? ` ${user.occupation}` : ""} based in ${user.location.city}.
+
+Today's date is ${todayStr}. Always book appointments on or after today. Never schedule anything in the past.
 
 ${benefitText}
 
