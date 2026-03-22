@@ -14,7 +14,10 @@ Requires in .env:
 """
 
 import os
-import os; os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")  # allow HTTP on localhost
+
+if os.getenv("ENV", "development") != "production":
+    os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")  # allow HTTP on localhost
+
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -25,8 +28,8 @@ from firebase import db
 
 router = APIRouter()
 
-CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID") or os.getenv("GOOGLE_CALENDAR_CLIENT_ID", "")
+CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET") or os.getenv("GOOGLE_CALENDAR_CLIENT_SECRET", "")
 REDIRECT_URI  = os.getenv("GOOGLE_CALENDAR_REDIRECT_URI", "http://localhost:8000/api/calendar/callback")
 SCOPES        = ["https://www.googleapis.com/auth/calendar.events"]
 FRONTEND_URL  = os.getenv("FRONTEND_URL", "http://localhost:5173")

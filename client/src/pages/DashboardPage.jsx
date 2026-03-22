@@ -21,6 +21,7 @@ import { useNavigate, useOutletContext } from "react-router-dom";
 import CheckupDashboardSection from "../components/CheckupDashboardSection";
 import { useAuth } from "../contexts/AuthContext";
 import { apiFetch, apiUrl } from "../lib/api";
+import { mapBenefits } from "../lib/benefits";
 import { getAppointmentStatus, sortAppointmentsByDate } from "../lib/appointments";
 import { isMemberDashboardOnboardingDismissedSession } from "../lib/memberDashboardOnboarding";
 import {
@@ -478,23 +479,7 @@ export default function DashboardPage() {
   ];
 
   // Map benefits from effectiveInsurers
-  const benefits = (() => {
-    const allCats = (effectiveInsurers ?? []).flatMap((i) => i.categories ?? []);
-    if (!allCats.length) return null;
-    const find = (...keys) => allCats.find((c) =>
-      keys.some((k) => String(c.name ?? "").toLowerCase().includes(k))
-    );
-    const dental = find("dental");
-    const vision = find("vision", "optometry", "eye");
-    const physio  = find("physio", "physical");
-    const hasAny  = [dental, vision, physio].some((c) => c && (c.annualLimit ?? 0) > 0);
-    return {
-      dental: { total: dental?.annualLimit ?? 0, used: dental?.used ?? 0 },
-      vision: { total: vision?.annualLimit ?? 0, used: vision?.used ?? 0 },
-      physio:  { total: physio?.annualLimit  ?? 0, used: physio?.used  ?? 0 },
-      hasAny,
-    };
-  })();
+  const benefits = mapBenefits(effectiveInsurers);
 
   const firstName = (user?.fullName || user?.name || "there").split(" ")[0];
   const greeting  = getGreeting();

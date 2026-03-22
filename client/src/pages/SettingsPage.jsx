@@ -118,6 +118,7 @@ export default function SettingsPage() {
     myEnterprise,
     currentFamily,
     updateUser,
+    updateProfile,
     createFamilyGroup,
     joinFamilyWithKey,
     ownerSetFamilyMemberRole,
@@ -161,6 +162,9 @@ export default function SettingsPage() {
       setCalendarConnected(true);
       setCalendarMsg("✅ Google Calendar connected! Appointments will be added automatically.");
       setTab("integrations");
+      if (typeof updateProfile === "function") {
+        updateProfile({ onboardingCalendarConnected: true });
+      }
     } else if (calParam === "error") {
       setCalendarMsg(`❌ Connection failed: ${searchParams.get("reason") || "unknown error"}`);
       setTab("integrations");

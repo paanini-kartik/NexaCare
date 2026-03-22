@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import ChatbotWidget from "./ChatbotWidget";
 import OnboardingOverlay from "./OnboardingOverlay";
 import { apiFetch } from "../lib/api";
+import { mapBenefits } from "../lib/benefits";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", enabled: true },
@@ -23,6 +24,7 @@ export default function Layout() {
   const { user, logout, showOnboardingOverlay, effectiveInsurers } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [notification, setNotification] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const refreshAppointments = useCallback(async () => {
     // Must match `userId` stored on appointment docs (Firebase uid preferred; email for local-only accounts)
@@ -54,26 +56,7 @@ export default function Layout() {
   }, [refreshAppointments]);
 
   // Map real benefits from effectiveInsurers (flatten all categories)
-  // Category names are: "Dental", "Optometry", "Physical" (from employerBenefitTemplates)
-  const mappedBenefits = useMemo(() => {
-    const allCats = (effectiveInsurers ?? []).flatMap((i) => i.categories ?? []);
-    if (!allCats.length) return null;
-    const find = (...keys) =>
-      allCats.find((c) =>
-        keys.some((k) => String(c.name ?? c.label ?? c.key ?? "").toLowerCase().includes(k))
-      );
-    const dental = find("dental");
-    const vision = find("vision", "optometry", "eye");
-    const physio = find("physio", "physical", "physiotherapy");
-    // Return null only if ALL three are missing AND have zero limit
-    const hasAny = [dental, vision, physio].some((c) => c && (c.annualLimit ?? 0) > 0);
-    return {
-      dental: { total: dental?.annualLimit ?? 0, used: dental?.used ?? 0 },
-      vision: { total: vision?.annualLimit ?? 0, used: vision?.used ?? 0 },
-      physio: { total: physio?.annualLimit ?? 0, used: physio?.used ?? 0 },
-      hasAny,
-    };
-  }, [effectiveInsurers]);
+  const mappedBenefits = useMemo(() => mapBenefits(effectiveInsurers), [effectiveInsurers]);
 
   const visibleNavItems = useMemo(
     () =>
@@ -101,6 +84,13 @@ export default function Layout() {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 4000);
   }, []);
+
+  const handleSearch = (e) => {
+    if (e.key === "Enter" && searchQuery.trim()) {
+      navigate(`/health-compass?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery("");
+    }
+  };
 
   const onLogout = () => {
     logout();
@@ -144,7 +134,12 @@ export default function Layout() {
           <header className="sticky-header">
             <div className="search-pill">
               <Search size={16} />
-              <input placeholder="Search appointments, clinics, support" />
+              <input
+                placeholder="Search appointments, clinics, support"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearch}
+              />
             </div>
             <div className="header-right">
               <button

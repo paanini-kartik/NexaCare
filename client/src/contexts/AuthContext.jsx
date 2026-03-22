@@ -429,11 +429,24 @@ export function AuthProvider({ children }) {
           return;
         }
         setFirebaseUid(firebaseUser.uid);
-        const data = await loadUserDocument(firebaseUser.uid);
+        let data = await loadUserDocument(firebaseUser.uid);
         if (!data) {
-          console.warn("NexaCare: missing Firestore user profile; signing out.");
-          await signOut(auth);
-          return;
+          // New user — auto-create a minimal Firestore doc rather than locking them out.
+          const defaultDoc = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            fullName: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "User",
+            accountType: "member",
+            createdAt: new Date().toISOString(),
+          };
+          try {
+            await saveUserDocument(firebaseUser.uid, { profile: defaultDoc });
+            data = { profile: defaultDoc };
+            console.info("NexaCare: created default Firestore profile for new user.");
+          } catch (createErr) {
+            console.warn("NexaCare: could not create default profile, proceeding anyway.", createErr);
+            data = { profile: defaultDoc };
+          }
         }
         const mergedProfile = migrateLegacyUser({
           ...data.profile,

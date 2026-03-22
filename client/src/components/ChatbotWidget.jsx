@@ -54,18 +54,6 @@ const TOOLS = [
     },
   },
   {
-    name: "update_benefit_usage",
-    description: "Record an expense against a benefit balance",
-    input_schema: {
-      type: "object",
-      required: ["benefitType", "amount"],
-      properties: {
-        benefitType: { type: "string", enum: ["dental", "vision", "physio"] },
-        amount: { type: "number", description: "Amount in dollars" },
-      },
-    },
-  },
-  {
     name: "show_notification",
     description: "Show a toast notification on the dashboard",
     input_schema: {
@@ -513,7 +501,11 @@ export default function ChatbotWidget({
     age: healthProfile?.age ?? authUser?.age ?? null,
     occupation: healthProfile?.occupation ?? authUser?.occupation ?? "patient",
     email: authUser?.email ?? "",
-    location: { city: "Toronto" },
+    location: {
+      city: healthProfile?.location?.city ?? authUser?.location?.city ?? "Toronto",
+      lat: healthProfile?.location?.lat ?? authUser?.location?.lat ?? 43.6532,
+      lng: healthProfile?.location?.lng ?? authUser?.location?.lng ?? -79.3832,
+    },
   };
 
   // Stable benefit key to detect real changes (avoids infinite re-render)
@@ -538,12 +530,20 @@ export default function ChatbotWidget({
     systemPromptRef.current = buildSystemPrompt(realUser, benefits, appointments);
   }, [appointments, benefits, realUser.age, realUser.email, realUser.name, realUser.occupation]);
 
+  function normalizeAppointmentStatus(list) {
+    const now = new Date();
+    return list.map((a) => ({
+      ...a,
+      status: new Date(a.date) >= now ? "upcoming" : "past",
+    }));
+  }
+
   async function getLiveAppointments() {
     if (onRefreshAppointments) {
       try {
         const refreshed = await onRefreshAppointments();
         if (Array.isArray(refreshed)) {
-          return refreshed;
+          return normalizeAppointmentStatus(refreshed);
         }
       } catch {
         // Fall through to the direct fetch below.
@@ -552,23 +552,23 @@ export default function ChatbotWidget({
 
     const ownerKey = authUser?.uid || authUser?.email;
     if (!ownerKey) {
-      return appointments;
+      return normalizeAppointmentStatus(appointments);
     }
 
     try {
       const response = await apiFetch(`/api/appointments/${encodeURIComponent(ownerKey)}`);
       if (!response.ok) {
-        return appointments;
+        return normalizeAppointmentStatus(appointments);
       }
       const data = await response.json();
       if (Array.isArray(data)) {
-        return data;
+        return normalizeAppointmentStatus(data);
       }
     } catch {
       // Use the last known appointment snapshot if the backend is unavailable.
     }
 
-    return appointments;
+    return normalizeAppointmentStatus(appointments);
   }
 
   function shouldHydrateAppointments(text) {
@@ -737,8 +737,8 @@ export default function ChatbotWidget({
       }
 
       case "find_clinics": {
-        const userLat = 43.6532;
-        const userLng = -79.3832;
+        const userLat = realUser.location?.lat ?? 43.6532;
+        const userLng = realUser.location?.lng ?? -79.3832;
         const typeParam = toolInput.type ?? "all";
         try {
           const res = await apiFetch(
@@ -762,9 +762,9 @@ export default function ChatbotWidget({
           date: toolInput.date,
           duration: toolInput.duration,
           status: "upcoming",
-          userId: authUser?.uid || authUser?.email || "user_demo_01",
+          userId: authUser?.email || authUser?.uid || "user_demo_01",
+          userEmail: authUser?.email || "",
           userName: realUser.name,
-          userEmail: realUser.email,
         };
 
         // Hit real backend — saves to Firebase + fires Resend emails
@@ -793,9 +793,9 @@ export default function ChatbotWidget({
           } else if (data.id) {
             newAppt = { ...newAppt, id: data.id };
           }
-          console.log("✅ Appointment saved to Firebase:", data.id);
+          if (import.meta.env.DEV) console.log("✅ Appointment saved to Firebase:", data.id);
         } catch (err) {
-          console.warn("⚠️ Backend unavailable, saving locally only:", err.message);
+          if (import.meta.env.DEV) console.warn("⚠️ Backend unavailable, saving locally only:", err.message);
         }
 
         if (onBookAppointment) onBookAppointment(newAppt);

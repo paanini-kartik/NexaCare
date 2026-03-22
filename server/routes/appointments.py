@@ -14,6 +14,18 @@ DEMO_CLINIC_EMAIL = os.getenv("DEMO_CLINIC_EMAIL", "")
 FROM_EMAIL        = os.getenv("FROM_EMAIL", "onboarding@resend.dev")
 
 
+def _benefit_coverage_text(appt_type: str) -> str:
+    """Return a benefit coverage sentence based on appointment type."""
+    t = (appt_type or "").lower()
+    if any(k in t for k in ("dental", "cleaning", "filling", "tooth", "orthodon")):
+        return "Your dental benefits may help cover the cost."
+    if any(k in t for k in ("vision", "eye", "optom", "optical")):
+        return "Your vision benefits may help cover the cost."
+    if any(k in t for k in ("physio", "physical", "massage", "rehabilitation")):
+        return "Your physiotherapy benefits may help cover the cost."
+    return "Check your NexaCare benefits to see what's covered."
+
+
 def send_confirmation_emails(appt: dict):
     """Send booking confirmation to user and clinic via Resend."""
     if not resend.api_key:
@@ -27,6 +39,7 @@ def send_confirmation_emails(appt: dict):
     duration    = appt.get("duration", 45)
     user_email  = appt.get("userEmail") or DEMO_USER_EMAIL
     clinic_email = appt.get("clinicEmail") or DEMO_CLINIC_EMAIL
+    benefit_text = _benefit_coverage_text(appt_type)
 
     # --- User confirmation email ---
     if user_email:
@@ -45,7 +58,7 @@ def send_confirmation_emails(appt: dict):
                     <tr><td style="padding:8px 0;color:#555">⏱ Duration</td><td><strong>{duration} minutes</strong></td></tr>
                     <tr><td style="padding:8px 0;color:#555">🏥 Clinic</td><td><strong>{clinic_name}</strong></td></tr>
                   </table>
-                  <p style="color:#555">Your dental benefits will cover the estimated cost. See you there!</p>
+                  <p style="color:#555">{benefit_text} See you there!</p>
                   <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
                   <p style="color:#aaa;font-size:12px">Booked via NexaCare — Your personal health assistant</p>
                 </div>

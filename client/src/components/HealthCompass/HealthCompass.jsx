@@ -127,6 +127,15 @@ export default function HealthCompass({ onBookingComplete }) {
   const [apptDate, setApptDate] = useState("");
   const [apptTime, setApptTime] = useState("09:00");
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [calendarConnected, setCalendarConnected] = useState(false);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    apiFetch(`/api/calendar/status?user_email=${encodeURIComponent(user.email)}`)
+      .then((r) => r.json())
+      .then((d) => setCalendarConnected(Boolean(d.connected)))
+      .catch(() => setCalendarConnected(false));
+  }, [user?.email]);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -364,7 +373,7 @@ export default function HealthCompass({ onBookingComplete }) {
         <div className="overlay-backdrop" onClick={() => setShowBookingModal(false)}>
           <div className="card-surface contained modal-anim" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px", width: "95%" }}>
             <h3>Book at {selectedClinic?.name}</h3>
-            <p className="page-section-lead">Select a preferred date and time. We'll sync this with your Google Calendar.</p>
+            <p className="page-section-lead">Select a preferred date and time.{calendarConnected ? " We'll sync this with your Google Calendar." : " If you've connected Google Calendar in Settings, this will be synced automatically."}</p>
             <form style={{ marginTop: "1.5rem", display: "grid", gap: "1rem" }} onSubmit={async (e) => {
               e.preventDefault();
               setIsBookingLoading(true);
