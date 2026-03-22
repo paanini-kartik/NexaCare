@@ -1,4 +1,4 @@
-import { Maximize2, MessageCircle, Minimize2, Paperclip, X } from "lucide-react";
+import { Clock, Maximize2, MessageCircle, Minimize2, Paperclip, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -435,22 +435,102 @@ export default function ChatbotWidget({
   ];
 
   const firstName = realUser.name.split(" ")[0];
-  const [messages, setMessages] = useState([
-    {
-      from: "bot",
-      text: `Hi ${firstName}! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
-    },
-  ]);
-  const [history,  setHistory]  = useState([]);
+
+  const STORAGE_KEY       = `nexacare:chat:${realUser.email || "guest"}`;
+  const HISTORY_INDEX_KEY = `nexacare:chat-index:${realUser.email || "guest"}`;
+  const MAX_SAVED_CHATS   = 20;
+
+  const welcomeMessage = {
+    from: "bot",
+    text: `Hi ${firstName}! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
+  };
+
+  // ── Load last session from localStorage ────────────────────────────────
+  const loadLastSession = () => {
+    try {
+      const index = JSON.parse(localStorage.getItem(HISTORY_INDEX_KEY) || "[]");
+      if (!index.length) return { messages: [welcomeMessage], history: [] };
+      const last = index[index.length - 1];
+      const saved = JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${last.id}`) || "null");
+      if (saved) return { messages: saved.messages, history: saved.apiHistory };
+    } catch {}
+    return { messages: [welcomeMessage], history: [] };
+  };
+
+  const lastSession = loadLastSession();
+  const [messages, setMessages] = useState(lastSession.messages);
+  const [history,  setHistory]  = useState(lastSession.history);
   const [input,    setInput]    = useState("");
   const [loading,  setLoading]  = useState(false);
   const [open,     setOpen]     = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+  const [chatIndex, setChatIndex] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_INDEX_KEY) || "[]"); } catch { return []; }
+  });
+  const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [isDragOver,  setIsDragOver]  = useState(false);
+  const currentChatIdRef = useRef(chatIndex.length ? chatIndex[chatIndex.length - 1]?.id : `chat-${Date.now()}`);
   const bottomRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, open]);
+
+  // ── Auto-save conversation on every message change ──────────────────────
+  useEffect(() => {
+    if (messages.length <= 1) return;
+    const id = currentChatIdRef.current;
+    const preview = messages.find((m) => m.from === "user")?.text?.slice(0, 60) ?? "New conversation";
+    const entry = { id, preview, date: new Date().toISOString() };
+
+    // Save full conversation
+    localStorage.setItem(`${STORAGE_KEY}:${id}`, JSON.stringify({
+      messages,
+      apiHistory: history,
+    }));
+
+    // Update index
+    setChatIndex((prev) => {
+      const filtered = prev.filter((c) => c.id !== id);
+      const next = [...filtered, entry].slice(-MAX_SAVED_CHATS);
+      localStorage.setItem(HISTORY_INDEX_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [messages]);
+
+  // ── Start a new chat ────────────────────────────────────────────────────
+  const startNewChat = () => {
+    currentChatIdRef.current = `chat-${Date.now()}`;
+    setMessages([welcomeMessage]);
+    setHistory([]);
+    setShowHistoryDrawer(false);
+  };
+
+  // ── Restore a past chat ─────────────────────────────────────────────────
+  const restoreChat = (id) => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${id}`) || "null");
+      if (saved) {
+        currentChatIdRef.current = id;
+        setMessages(saved.messages);
+        setHistory(saved.apiHistory);
+        setShowHistoryDrawer(false);
+      }
+    } catch {}
+  };
+
+  // ── Delete a past chat ──────────────────────────────────────────────────
+  const deleteChat = (id, e) => {
+    e.stopPropagation();
+    localStorage.removeItem(`${STORAGE_KEY}:${id}`);
+    setChatIndex((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      localStorage.setItem(HISTORY_INDEX_KEY, JSON.stringify(next));
+      return next;
+    });
+    if (currentChatIdRef.current === id) startNewChat();
+  };
 
   async function executeTool(name, toolInput) {
     switch (name) {
@@ -832,10 +912,10 @@ export default function ChatbotWidget({
   // ── File upload handler ─────────────────────────────────────────────────
   const fileInputRef = useRef(null);
 
-  async function handleFileUpload(e) {
-    const file = e.target.files?.[0];
+  async function handleFileUpload(fileOrEvent) {
+    const file = fileOrEvent instanceof File ? fileOrEvent : fileOrEvent.target.files?.[0];
     if (!file) return;
-    e.target.value = "";   // reset so same file can be re-uploaded
+    if (!(fileOrEvent instanceof File)) fileOrEvent.target.value = "";
 
     const isPdf   = file.type === "application/pdf";
     const isImage = file.type.startsWith("image/");
@@ -844,8 +924,25 @@ export default function ChatbotWidget({
       return;
     }
 
-    // Show user message with file name
-    setMessages((prev) => [...prev, { from: "user", text: `📎 ${file.name}`, isFile: true }]);
+    // For images: get data URL for preview
+    let imageDataUrl = null;
+    if (isImage) {
+      imageDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Show user message with preview or filename
+    setMessages((prev) => [...prev, {
+      from: "user",
+      text: file.name,
+      isFile: true,
+      isPdf,
+      isImage,
+      imageDataUrl,
+    }]);
     setLoading(true);
 
     try {
@@ -873,11 +970,13 @@ If this is NOT an insurance document, say so clearly and don't call any tools.`;
 
       } else {
         // ── Image: base64 encode → send as vision block ──────────────────
-        const base64 = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result.split(",")[1]);
-          reader.readAsDataURL(file);
-        });
+        const base64 = imageDataUrl
+          ? imageDataUrl.split(",")[1]
+          : await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result.split(",")[1]);
+              reader.readAsDataURL(file);
+            });
 
         const benefitContext = benefits?.hasAny
           ? `User's benefit balances — Dental: $${benefits.dental.total - benefits.dental.used} remaining, Vision: $${benefits.vision.total - benefits.vision.used} remaining, Physio: $${benefits.physio.total - benefits.physio.used} remaining.`
@@ -947,6 +1046,16 @@ Instructions:
     }
   }
 
+  // ── Drag & drop handlers ────────────────────────────────────────────────
+  const onDragOver = (e) => { e.preventDefault(); setIsDragOver(true); };
+  const onDragLeave = () => setIsDragOver(false);
+  const onDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFileUpload(file);
+  };
+
   return (
     <div className={`chatbot-mini${expanded ? " chatbot-expanded" : ""}`}>
       <button className="chat-fab" type="button" aria-label="Open assistant"
@@ -954,24 +1063,83 @@ Instructions:
         <MessageCircle size={22} strokeWidth={2} />
       </button>
 
+      {/* Lightbox */}
+      {lightboxSrc && (
+        <div className="chat-lightbox" onClick={() => setLightboxSrc(null)}>
+          <img src={lightboxSrc} alt="Full size preview" className="chat-lightbox-img" />
+        </div>
+      )}
+
       {open && (
-        <div className="chat-panel" role="dialog" aria-label="AI Assistant">
+        <div
+          className={`chat-panel${isDragOver ? " chat-panel--dragover" : ""}`}
+          role="dialog"
+          aria-label="AI Assistant"
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
+          {isDragOver && (
+            <div className="chat-drop-overlay">
+              <Paperclip size={28} />
+              <span>Drop your image or PDF</span>
+            </div>
+          )}
+
           <div className="chat-panel-card">
             <header className="chat-panel-head">
               <strong>AI Assistant</strong>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span className="chat-panel-badge">NexaCare</span>
+
+                {/* History button */}
+                <button type="button" aria-label="Chat history"
+                  onClick={() => setShowHistoryDrawer((s) => !s)}
+                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "inherit" }}>
+                  <Clock size={15} />
+                </button>
+
+                {/* New chat button */}
+                <button type="button" aria-label="New chat"
+                  onClick={startNewChat}
+                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "inherit" }}>
+                  <Plus size={15} />
+                </button>
+
                 <button type="button" aria-label={expanded ? "Minimize" : "Expand"}
                   onClick={() => setExpanded((e) => !e)}
                   style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "inherit" }}>
-                  {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
                 </button>
                 <button type="button" aria-label="Close" onClick={() => setOpen(false)}
                   style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "inherit" }}>
-                  <X size={16} />
+                  <X size={15} />
                 </button>
               </div>
             </header>
+
+            {/* History drawer */}
+            {showHistoryDrawer && (
+              <div className="chat-history-drawer">
+                <p className="chat-history-title">Past conversations</p>
+                {chatIndex.length <= 1 ? (
+                  <p className="chat-history-empty">No past conversations yet.</p>
+                ) : (
+                  [...chatIndex].reverse().map((c) => (
+                    <div key={c.id} className="chat-history-item" onClick={() => restoreChat(c.id)}>
+                      <div className="chat-history-item-text">
+                        <span className="chat-history-preview">{c.preview}</span>
+                        <span className="chat-history-date">{new Date(c.date).toLocaleDateString()}</span>
+                      </div>
+                      <button type="button" className="chat-history-delete"
+                        onClick={(e) => deleteChat(c.id, e)} aria-label="Delete">
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
 
             <div className="chat-log">
               {messages.map((m, idx) => {
@@ -993,9 +1161,19 @@ Instructions:
                       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                         {m.text}
                       </ReactMarkdown>
-                    ) : m.isFile ? (
-                      <span style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.85 }}>
-                        <Paperclip size={13} /> {m.text.replace("📎 ", "")}
+                    ) : m.isFile && m.isImage && m.imageDataUrl ? (
+                      <div className="chat-image-bubble">
+                        <img
+                          src={m.imageDataUrl}
+                          alt={m.text}
+                          className="chat-image-preview"
+                          onClick={() => setLightboxSrc(m.imageDataUrl)}
+                        />
+                        <span className="chat-image-name"><Paperclip size={11} /> {m.text}</span>
+                      </div>
+                    ) : m.isFile && m.isPdf ? (
+                      <span className="chat-pdf-bubble">
+                        <Paperclip size={13} /> {m.text}
                       </span>
                     ) : m.text}
                   </div>
@@ -1029,17 +1207,12 @@ Instructions:
                 style={{ display: "none" }}
                 onChange={handleFileUpload}
               />
-              <button
-                type="button"
-                className="chat-upload-btn"
-                aria-label="Upload image or PDF"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loading}
-              >
+              <button type="button" className="chat-upload-btn" aria-label="Upload image or PDF"
+                onClick={() => fileInputRef.current?.click()} disabled={loading}>
                 <Paperclip size={16} />
               </button>
               <input value={input} onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask a question or upload a photo / PDF…" aria-label="Message" disabled={loading} />
+                placeholder="Ask a question or drop a photo / PDF…" aria-label="Message" disabled={loading} />
               <button className="chat-send-btn" type="submit" disabled={loading || !input.trim()}>
                 Send
               </button>
