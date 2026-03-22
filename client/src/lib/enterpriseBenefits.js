@@ -1,11 +1,11 @@
 import { normEmail } from "./firestoreSync";
 
 /**
- * Resolve all employer schedules that apply — household (family) and work (employee) can both be active.
+ * Resolve employer-linked schedules: work assignments (per member) + family `memberWorkSchedules`.
  * Manual / family-shared providers come from the family record or personal user fields.
- * Owner + contributor employer keys are copied into `family.memberWorkSchedules` so plans persist for the whole family.
+ * We do not add a separate "household" duplicate of the owner's work plan (that double-counted limits).
  */
-export function resolveBenefitSources(user, household, enterprise, sessionMeta) {
+export function resolveBenefitSources(user, sessionMeta) {
   if (!user) return [];
 
   /** Employer accounts manage plans in Employer Hub; dashboard/benefits stay empty until they use a member profile. */
@@ -14,14 +14,6 @@ export function resolveBenefitSources(user, household, enterprise, sessionMeta) 
   const out = [];
   /** One slot per person + work row so two members on the same org/role each count; same row from two code paths dedupes. */
   const seenSlots = new Set();
-
-  const pushHousehold = (enterpriseId, roleId) => {
-    if (!enterpriseId || !roleId) return;
-    const slot = `household|${enterpriseId}|${roleId}`;
-    if (seenSlots.has(slot)) return;
-    seenSlots.add(slot);
-    out.push({ enterpriseId, roleId, kind: "household" });
-  };
 
   const pushWork = (memberEmailNorm, wa, kind = "work") => {
     if (!wa?.enterpriseId || !wa?.roleTemplateId) return;
@@ -38,9 +30,6 @@ export function resolveBenefitSources(user, household, enterprise, sessionMeta) 
     });
   };
 
-  if (household?.enterpriseId && household?.sharedBenefitRoleId) {
-    pushHousehold(household.enterpriseId, household.sharedBenefitRoleId);
-  }
   const isDependent = user.familyRole === "dependent";
   const me = normEmail(user.email);
   if (!isDependent) {

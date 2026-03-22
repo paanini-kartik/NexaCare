@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  isRequiredEmployerCategoryName,
+  mergeWithRequiredEmployerCategories,
+  newEmployerCategoryRowKey,
+} from "../lib/employerBenefitTemplates";
 
-function CategoryEditor({ categories, onChange }) {
+function CategoryEditor({ roleId, categories, onChange }) {
   const rows = Array.isArray(categories) ? categories : [];
   const patch = (next) => onChange(next);
 
   return (
     <div>
-      {rows.length === 0 ? (
-        <p className="page-section-lead">No benefit categories yet—add a row for each line of coverage.</p>
-      ) : null}
+      <p className="page-section-lead" style={{ marginBottom: "0.75rem" }}>
+        <strong>Optometry</strong>, <strong>Dental</strong>, and <strong>Physical</strong> are required for every role.
+        You can add extra lines below them.
+      </p>
       <div className="table-wrap">
         <table>
           <thead>
@@ -22,57 +28,70 @@ function CategoryEditor({ categories, onChange }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => (
-              <tr key={`cat-${idx}`}>
-                <td>
-                  <input
-                    className="table-input"
-                    value={row.name}
-                    onChange={(e) => {
-                      const next = rows.map((c, i) => (i === idx ? { ...c, name: e.target.value } : c));
-                      patch(next);
-                    }}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="table-input"
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    max="1"
-                    value={row.coverage}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      const next = rows.map((c, i) => (i === idx ? { ...c, coverage: v, used: 0 } : c));
-                      patch(next);
-                    }}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="table-input"
-                    type="number"
-                    min="0"
-                    value={row.annualLimit}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      const next = rows.map((c, i) => (i === idx ? { ...c, annualLimit: v, used: 0 } : c));
-                      patch(next);
-                    }}
-                  />
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={() => patch(rows.filter((_, i) => i !== idx))}
-                  >
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((row, idx) => {
+              const locked = isRequiredEmployerCategoryName(row.name);
+              const rowKey = row.rowKey || `${roleId}-cat-${idx}`;
+              return (
+                <tr key={rowKey}>
+                  <td>
+                    <input
+                      className="table-input"
+                      value={row.name}
+                      readOnly={locked}
+                      title={locked ? "Required category" : undefined}
+                      onChange={(e) => {
+                        if (locked) return;
+                        const next = rows.map((c, i) => (i === idx ? { ...c, name: e.target.value } : c));
+                        patch(next);
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="table-input"
+                      type="number"
+                      step="0.05"
+                      min="0"
+                      max="1"
+                      value={row.coverage}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        const next = rows.map((c, i) => (i === idx ? { ...c, coverage: v, used: 0 } : c));
+                        patch(next);
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="table-input"
+                      type="number"
+                      min="0"
+                      value={row.annualLimit}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        const next = rows.map((c, i) => (i === idx ? { ...c, annualLimit: v, used: 0 } : c));
+                        patch(next);
+                      }}
+                    />
+                  </td>
+                  <td>
+                    {locked ? (
+                      <span className="page-section-lead" style={{ fontSize: "0.85rem" }}>
+                        Required
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => patch(rows.filter((_, i) => i !== idx))}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -81,7 +100,16 @@ function CategoryEditor({ categories, onChange }) {
           type="button"
           className="secondary-btn"
           onClick={() =>
-            patch([...rows, { name: "New category", coverage: 0, annualLimit: 0, used: 0 }])
+            patch([
+              ...rows,
+              {
+                rowKey: newEmployerCategoryRowKey(),
+                name: "New category",
+                coverage: 0,
+                annualLimit: 0,
+                used: 0,
+              },
+            ])
           }
         >
           Add category
@@ -101,6 +129,7 @@ export default function EmployerPage() {
     renameEmployeeRole,
     setEmployerPreviewRole,
     ensureEmployerInviteKeysForMyOrg,
+    updateEnterprise,
   } = useAuth();
 
   const [tab, setTab] = useState("overview");
@@ -118,6 +147,20 @@ export default function EmployerPage() {
   useEffect(() => {
     if (org?.id) ensureEmployerInviteKeysForMyOrg();
   }, [org?.id, ensureEmployerInviteKeysForMyOrg]);
+
+  /** Backfill required Optometry / Dental / Physical rows for orgs created before this rule. */
+  useEffect(() => {
+    if (!org?.id || !org.employeeRoles?.length) return;
+    const nextRoles = org.employeeRoles.map((r) => ({
+      ...r,
+      categories: mergeWithRequiredEmployerCategories(r.categories),
+    }));
+    const dirty = org.employeeRoles.some(
+      (r, i) => JSON.stringify(r.categories || []) !== JSON.stringify(nextRoles[i].categories)
+    );
+    if (!dirty) return;
+    updateEnterprise(org.id, { employeeRoles: nextRoles });
+  }, [org?.id, org?.employeeRoles, updateEnterprise]);
 
   if (!isEmployer) {
     return <Navigate to="/dashboard" replace />;
@@ -146,7 +189,7 @@ export default function EmployerPage() {
         <h1>Employer hub</h1>
         <p>
           {org.name} — manage job roles and employer-set benefit rates. Edits apply everywhere that role is assigned,
-          including dependents and contributors on a synced household. Invite keys are created automatically for each role;
+          including family members linked through invite keys. Invite keys are created automatically for each role;
           copy them from <strong>Settings → Connections</strong>.
         </p>
       </header>
@@ -230,6 +273,7 @@ export default function EmployerPage() {
                 only the plan design. Assign roles via invite keys (auto-created per role).
               </p>
               <CategoryEditor
+                roleId={role.id}
                 categories={role.categories}
                 onChange={(next) => updateEmployeeRoleCategories(org.id, role.id, next)}
               />
@@ -239,8 +283,8 @@ export default function EmployerPage() {
           <section className="contained employer-form-panel">
             <h2 className="page-section-title">Add role</h2>
             <p className="page-section-lead">
-              Creates a new template (categories start empty or copy from your first role if it has rows). An invite key
-              is created automatically.
+              Creates a new job template with <strong>Optometry</strong>, <strong>Dental</strong>, and{" "}
+              <strong>Physical</strong> lines (you set limits next). An invite key is created automatically.
             </p>
             <div className="form-grid form-grid--inline">
               <label className="form-field">

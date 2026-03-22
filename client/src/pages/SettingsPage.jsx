@@ -632,9 +632,8 @@ export default function SettingsPage() {
                 <>
                   <h3 className="settings-subhead">Work positions</h3>
                   <p className="page-section-lead">
-                    Employer invite keys you apply show up here. You can hold multiple positions; benefits combine every
-                    active plan. Removing a position unlinks that employer—your household schedule (if you are the family
-                    owner) follows your <strong>primary</strong> position (the first one listed).
+                    Employer invite keys you apply show up here. You can hold multiple positions; totals combine each
+                    distinct work plan once. Removing a position unlinks that employer from your benefits.
                   </p>
                   {(user?.workAssignments || []).length ? (
                     <ul className="settings-key-items" style={{ marginTop: "0.5rem" }}>
@@ -676,8 +675,8 @@ export default function SettingsPage() {
                 Apply an <strong>EMP-…</strong> key to add a work position (you can link more than one).{" "}
                 {isOwner ? (
                   <>
-                    As <strong>family owner</strong>, that same assignment automatically drives the <strong>household</strong>{" "}
-                    benefit schedule your dependents see—no separate form.
+                    As <strong>family owner</strong>, your work positions are shared into the family record so dependents
+                    see the same plans—each assignment is counted once in your totals.
                   </>
                 ) : isDependent ? (
                   <>

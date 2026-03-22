@@ -2,6 +2,14 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAuth } from "./contexts/AuthContext";
+
+/** Employer accounts are org entities, not patient profiles — block member-only pages. */
+function MemberOnlyRoute({ children }) {
+  const { user, authReady } = useAuth();
+  if (!authReady) return null;
+  if (user?.accountType === "employer") return <Navigate to="/dashboard" replace />;
+  return children;
+}
 import AuthPage from "./pages/AuthPage";
 import BenefitsPage from "./pages/BenefitsPage";
 import CompassPage from "./pages/CompassPage";
@@ -35,9 +43,23 @@ export default function App() {
         }
       >
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="health-profile" element={<HealthProfilePage />} />
+        <Route
+          path="health-profile"
+          element={
+            <MemberOnlyRoute>
+              <HealthProfilePage />
+            </MemberOnlyRoute>
+          }
+        />
         <Route path="health-compass" element={<CompassPage />} />
-        <Route path="benefits" element={<BenefitsPage />} />
+        <Route
+          path="benefits"
+          element={
+            <MemberOnlyRoute>
+              <BenefitsPage />
+            </MemberOnlyRoute>
+          }
+        />
         <Route path="employer" element={<EmployerPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="emergency" element={<EmergencyPage />} />

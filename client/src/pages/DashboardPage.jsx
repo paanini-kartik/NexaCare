@@ -8,7 +8,12 @@ import {
 import { useNavigate } from "react-router-dom";
 import CheckupDashboardSection from "../components/CheckupDashboardSection";
 import { useAuth } from "../contexts/AuthContext";
-import { onboardingSteps, quickActions } from "../data/mockData";
+import {
+  employerOnboardingSteps,
+  employerQuickActions,
+  onboardingSteps,
+  quickActions,
+} from "../data/mockData";
 
 const iconMap = {
   calendar: CalendarCheck,
@@ -19,7 +24,7 @@ const iconMap = {
 
 const actionTones = ["mint", "sky", "amber", "violet"];
 
-function BenefitsSummaryCard() {
+function MemberBenefitsSummaryCard() {
   const { benefitDashboardSummary, benefitContextDescription, effectiveInsurers } = useAuth();
   const { remaining, avgCoverage } = benefitDashboardSummary;
   const hasCategories = effectiveInsurers.some((i) => (i.categories || []).length > 0);
@@ -53,7 +58,44 @@ function BenefitsSummaryCard() {
   );
 }
 
-function OnboardingRibbon() {
+function EmployerProgramSummaryCard() {
+  const { employerProgramSummary, myEnterprise } = useAuth();
+  const summary = employerProgramSummary || {
+    totalAnnualLimit: 0,
+    byLine: { Optometry: 0, Dental: 0, Physical: 0 },
+    roleCount: 0,
+  };
+
+  return (
+    <section className="wallet-card dashboard-benefits-hero" aria-label="Worker benefit program totals">
+      <p className="wallet-eyebrow">Benefits offered to workers</p>
+      <h3>${summary.totalAnnualLimit.toLocaleString()}</h3>
+      <div className="wallet-metrics">
+        <span>
+          Total annual limits across <strong>{summary.roleCount}</strong> job role
+          {summary.roleCount === 1 ? "" : "s"} (summed plan design, not personal usage)
+        </span>
+      </div>
+      <ul className="wallet-footnote" style={{ margin: "0.75rem 0 0", paddingLeft: "1.1rem" }}>
+        <li>Optometry: ${summary.byLine.Optometry.toLocaleString()}</li>
+        <li>Dental: ${summary.byLine.Dental.toLocaleString()}</li>
+        <li>Physical: ${summary.byLine.Physical.toLocaleString()}</li>
+      </ul>
+      <p className="wallet-footnote" style={{ marginTop: "0.5rem" }}>
+        {myEnterprise?.name ? (
+          <>
+            Configured in <strong>Employer Hub</strong> for <strong>{myEnterprise.name}</strong>. You do not have a
+            personal member benefit wallet.
+          </>
+        ) : (
+          <>Link an organization in Employer Hub to configure role templates.</>
+        )}
+      </p>
+    </section>
+  );
+}
+
+function OnboardingRibbon({ steps }) {
   const navigate = useNavigate();
   return (
     <section className="onboarding-vibe onboarding-vibe--beside-benefits" aria-labelledby="dash-onboard-heading">
@@ -64,7 +106,7 @@ function OnboardingRibbon() {
         <p>Tap a step to continue—two above, one stretched below.</p>
       </div>
       <div className="step-chip-track step-chip-track--grid">
-        {onboardingSteps.map((step, index) => (
+        {steps.map((step, index) => (
           <button
             key={step.id}
             type="button"
@@ -81,7 +123,7 @@ function OnboardingRibbon() {
   );
 }
 
-function QuickActionsVivid() {
+function QuickActionsVivid({ items }) {
   const navigate = useNavigate();
   return (
     <section className="quick-actions-vibe" aria-labelledby="dash-actions-heading">
@@ -90,7 +132,7 @@ function QuickActionsVivid() {
       </h2>
       <p className="quick-actions-lead">Jump in with color—same routes, more energy.</p>
       <div className="action-vibe-grid">
-        {quickActions.map((item, i) => {
+        {items.map((item, i) => {
           const Icon = iconMap[item.icon];
           const tone = actionTones[i % actionTones.length];
           return (
@@ -124,17 +166,25 @@ function EmptyTransactions() {
   );
 }
 
-function NewsFeed() {
+function NewsFeed({ employerMode }) {
   return (
     <section className="insights-vibe" aria-labelledby="dash-insights-heading">
       <h2 id="dash-insights-heading" className="title-vibe">
-        Health insights
+        {employerMode ? "Organization" : "Health insights"}
       </h2>
-      <p className="insights-vibe-lead">Your own notes and care context will live here as you use the app.</p>
+      <p className="insights-vibe-lead">
+        {employerMode
+          ? "Member-facing health tools stay on employee accounts. You manage benefit templates and keys from Employer Hub and Settings."
+          : "Your own notes and care context will live here as you use the app."}
+      </p>
       <div className="empty-vibe" aria-live="polite">
         <div className="empty-vibe-inner">
           <h3>No feed items</h3>
-          <p>We do not inject sample articles—complete your health profile and benefits to keep everything personal.</p>
+          <p>
+            {employerMode
+              ? "We do not show sample data—configure roles and share invite keys when you are ready."
+              : "We do not inject sample articles—complete your health profile and benefits to keep everything personal."}
+          </p>
         </div>
       </div>
     </section>
@@ -142,29 +192,33 @@ function NewsFeed() {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const isEmployer = user?.accountType === "employer";
+
   return (
     <div className="page-flow dashboard-flow">
       <header className="page-hero page-hero--alive dashboard-page-intro">
         <p className="page-hero-eyebrow">Today</p>
         <h1>Dashboard</h1>
         <p>
-          Benefits, next steps, and care navigation in one flow. We kept the structure where data needs it and let
-          everything else stay loose.
+          {isEmployer
+            ? "Organization overview: totals from the benefit templates you offer workers—not a personal member wallet."
+            : "Benefits, next steps, and care navigation in one flow. We kept the structure where data needs it and let everything else stay loose."}
         </p>
       </header>
 
       <div className="dashboard-benefits-onboard">
-        <BenefitsSummaryCard />
-        <OnboardingRibbon />
+        {isEmployer ? <EmployerProgramSummaryCard /> : <MemberBenefitsSummaryCard />}
+        <OnboardingRibbon steps={isEmployer ? employerOnboardingSteps : onboardingSteps} />
       </div>
 
-      <QuickActionsVivid />
+      <QuickActionsVivid items={isEmployer ? employerQuickActions : quickActions} />
 
-      <CheckupDashboardSection />
+      {isEmployer ? null : <CheckupDashboardSection />}
 
       <div className="dashboard-lower dashboard-lower--alive">
         <EmptyTransactions />
-        <NewsFeed />
+        <NewsFeed employerMode={isEmployer} />
       </div>
     </div>
   );

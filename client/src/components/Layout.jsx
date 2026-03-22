@@ -7,9 +7,9 @@ import OnboardingOverlay from "./OnboardingOverlay";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", enabled: true },
-  { to: "/health-profile", label: "Health Profile", enabled: true },
+  { to: "/health-profile", label: "Health Profile", enabled: true, memberOnly: true },
   { to: "/health-compass", label: "Health Compass", enabled: true },
-  { to: "/benefits", label: "Benefits", enabled: true },
+  { to: "/benefits", label: "Benefits", enabled: true, memberOnly: true },
   { to: "/employer", label: "Employer Hub", enabled: true, employerOnly: true },
   { to: "/settings", label: "Settings", enabled: true },
   { to: "/emergency", label: "Emergency", enabled: true },
@@ -23,7 +23,12 @@ export default function Layout() {
   const [notification, setNotification] = useState(null);
 
   const visibleNavItems = useMemo(
-    () => navItems.filter((item) => !item.employerOnly || user?.accountType === "employer"),
+    () =>
+      navItems.filter((item) => {
+        if (item.employerOnly && user?.accountType !== "employer") return false;
+        if (item.memberOnly && user?.accountType === "employer") return false;
+        return true;
+      }),
     [user?.accountType]
   );
 
@@ -48,7 +53,7 @@ export default function Layout() {
           <div className="brand-icon">N</div>
           <div>
             <strong>NexaCare</strong>
-            <p>Patient Portal</p>
+            <p>{user?.accountType === "employer" ? "Organization" : "Patient Portal"}</p>
           </div>
         </div>
 
