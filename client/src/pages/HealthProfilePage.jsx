@@ -98,7 +98,27 @@ export default function HealthProfilePage() {
   };
 
   const removeExtraCare = (id) => {
-    updateProfile({ extraCareServices: extraCareServices.filter((e) => e.id !== id) });
+    updateProfile((prev) => ({
+      extraCareServices: (prev.extraCareServices ?? NO_EXTRAS).filter((e) => e.id !== id),
+    }));
+  };
+
+  const removeMedicalEvent = (id) => {
+    updateProfile((prev) => ({
+      medicalHistory: (prev.medicalHistory || []).filter((item) => item.id !== id),
+    }));
+  };
+
+  const removeAllergy = (id) => {
+    updateProfile((prev) => ({
+      allergies: (prev.allergies || []).filter((a) => a.id !== id),
+    }));
+  };
+
+  const removeFavoriteClinic = (id) => {
+    updateProfile((prev) => ({
+      favoriteClinics: (prev.favoriteClinics || []).filter((c) => c.id !== id),
+    }));
   };
 
   const intervalHints = useMemo(() => {
@@ -197,7 +217,15 @@ export default function HealthProfilePage() {
             </label>
             <label className="form-field">
               Calendar provider
-              <select value={healthProfile.calendarProvider} onChange={onChange("calendarProvider")}>
+              <select
+                value={healthProfile.calendarProvider}
+                onChange={(e) =>
+                  updateProfile({
+                    calendarProvider: e.target.value,
+                    onboardingCalendarConnected: true,
+                  })
+                }
+              >
                 <option>Google</option>
                 <option>Outlook</option>
                 <option>Apple</option>
@@ -240,7 +268,11 @@ export default function HealthProfilePage() {
               Add medical event
             </button>
           </div>
-          <div className="list-stack profile-list-tight">
+          <div
+            className={`list-stack profile-list-tight${sortedHistory.length >= 5 ? " profile-list-scroll" : ""}`}
+            role="region"
+            aria-label="Medical history list"
+          >
             {sortedHistory.map((event) => (
               <details key={event.id} className="list-card details-card profile-list-flat">
                 <summary>
@@ -253,11 +285,11 @@ export default function HealthProfilePage() {
                 <button
                   className="secondary-btn"
                   type="button"
-                  onClick={() =>
-                    updateProfile({
-                      medicalHistory: (healthProfile.medicalHistory || []).filter((item) => item.id !== event.id),
-                    })
-                  }
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    removeMedicalEvent(event.id);
+                  }}
                 >
                   <Trash2 size={14} /> Remove
                 </button>
@@ -294,7 +326,13 @@ export default function HealthProfilePage() {
               Add allergy
             </button>
           </div>
-          <div className="list-stack profile-list-tight">
+          <div
+            className={`list-stack profile-list-tight${
+              (healthProfile.allergies || []).length >= 5 ? " profile-list-scroll" : ""
+            }`}
+            role="region"
+            aria-label="Allergies list"
+          >
             {(healthProfile.allergies || []).map((item) => (
               <article key={item.id} className="list-card profile-list-flat">
                 <div>
@@ -304,11 +342,7 @@ export default function HealthProfilePage() {
                 <button
                   className="secondary-btn"
                   type="button"
-                  onClick={() =>
-                    updateProfile({
-                      allergies: (healthProfile.allergies || []).filter((allergy) => allergy.id !== item.id),
-                    })
-                  }
+                  onClick={() => removeAllergy(item.id)}
                 >
                   <Trash2 size={14} /> Remove
                 </button>
@@ -356,13 +390,7 @@ export default function HealthProfilePage() {
                 <button
                   className="secondary-btn"
                   type="button"
-                  onClick={() =>
-                    updateProfile({
-                      favoriteClinics: (healthProfile.favoriteClinics || []).filter(
-                        (clinic) => clinic.id !== item.id
-                      ),
-                    })
-                  }
+                  onClick={() => removeFavoriteClinic(item.id)}
                 >
                   <Trash2 size={14} /> Remove
                 </button>
