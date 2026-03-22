@@ -12,7 +12,7 @@ _server_dir = Path(__file__).resolve().parent
 _repo_root = _server_dir.parent
 
 # Load env FIRST before any other imports read os.getenv()
-load_dotenv(_repo_root / ".env")
+load_dotenv(_repo_root / ".env", override=True)
 load_dotenv(_server_dir / ".env", override=True)
 
 import os
