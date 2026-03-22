@@ -1043,6 +1043,15 @@ export default function ChatbotWidget({
     const liveAppointments = await getLiveAppointments();
     const systemPrompt = buildSystemPrompt(realUser, benefits, liveAppointments);
     systemPromptRef.current = systemPrompt;
+
+    // Keep at most the last 10 messages (5 turns) to stay under rate limits.
+    // Always keep the first message so early context isn't lost mid-session.
+    const MAX_HISTORY = 10;
+    const trimmed =
+      apiMessages.length > MAX_HISTORY
+        ? [apiMessages[0], ...apiMessages.slice(-MAX_HISTORY + 1)]
+        : apiMessages;
+
     const response = await fetch(apiUrl("/api/ai/chat"), {
       method: "POST",
       headers: {
@@ -1052,7 +1061,7 @@ export default function ChatbotWidget({
         max_tokens: 1024,
         system: systemPrompt,
         tools: TOOLS,
-        messages: apiMessages,
+        messages: trimmed,
       }),
     });
     const data = await response.json();
