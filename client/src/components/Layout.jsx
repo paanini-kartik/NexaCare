@@ -13,7 +13,6 @@ const navItems = [
   { to: "/employer", label: "Employer Hub", enabled: true, employerOnly: true },
   { to: "/settings", label: "Settings", enabled: true },
   { to: "/emergency", label: "Emergency", enabled: true },
-  { to: "/soon", label: "Labs (Soon)", enabled: false },
 ];
 
 export default function Layout() {
