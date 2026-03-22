@@ -9,6 +9,28 @@ import { useAuth } from "../contexts/AuthContext";
 import { apiUrl, apiFetch } from "../lib/api";
 import { getAppointmentStatus } from "../lib/appointments";
 
+/** Format an ISO date string as a human-readable Toronto local time.
+ *  e.g. "2026-03-30T18:00:00Z" → "Mon, Mar 30, 2026 at 2:00 PM"
+ *  Used in the APPT_CARD, system prompt, and get_appointments tool response
+ *  so the AI and UI always show the same date/time.
+ */
+function fmtToronto(isoString) {
+  if (!isoString) return "TBD";
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Toronto",
+      weekday: "short",
+      month:   "short",
+      day:     "numeric",
+      year:    "numeric",
+      hour:    "2-digit",
+      minute:  "2-digit",
+    }).format(new Date(isoString));
+  } catch {
+    return isoString;
+  }
+}
+
 const TOOLS = [
   {
     name: "get_user_profile",
@@ -34,7 +56,7 @@ const TOOLS = [
       properties: {
         type: { type: "string", description: "e.g. Annual Dental Checkup" },
         clinicName: { type: "string", description: "Name of the clinic" },
-        date: { type: "string", description: "ISO 8601 date string" },
+        date: { type: "string", description: "ISO 8601 date-time string in UTC representing the appointment in America/Toronto time. Always include a time — never use T00:00:00Z. If the user does not specify a time, default to 10:00 AM Toronto time. Toronto is UTC-4 from March–November (EDT) and UTC-5 December–February (EST). Example: March 30 at 2:00 PM EDT = 2026-03-30T18:00:00Z. Example: March 30 at 10:00 AM EDT = 2026-03-30T14:00:00Z." },
         duration: { type: "number", description: "Duration in minutes" },
       },
     },
@@ -222,7 +244,7 @@ const TOOLS = [
   },
   {
     name: "add_to_calendar",
-    description: "Add a booked appointment to the user's Google Calendar. Call this after booking if the user asks, or proactively after book_appointment.",
+    description: "Add a booked appointment to the user's Google Calendar. Only call this if the user explicitly asks to add it to their calendar — bookings are already synced automatically by the backend.",
     input_schema: {
       type: "object",
       required: ["type", "clinicName", "date", "duration"],
@@ -277,8 +299,8 @@ Today's date is ${todayStr}. Always book appointments on or after today. Never s
 
 ${benefitText}
 
-Upcoming appointments: ${upcoming.length ? upcoming.map((a) => `${a.type} at ${a.clinicName} on ${a.date}`).join(", ") : "none — user has no upcoming appointments"}
-Past appointments: ${past.length ? past.map((a) => `${a.type} at ${a.clinicName} on ${a.date}`).join(", ") : "none"}
+Upcoming appointments: ${upcoming.length ? upcoming.map((a) => `${a.type} at ${a.clinicName} on ${fmtToronto(a.date)}`).join(", ") : "none — user has no upcoming appointments"}
+Past appointments: ${past.length ? past.map((a) => `${a.type} at ${a.clinicName} on ${fmtToronto(a.date)}`).join(", ") : "none"}
 
 You are a fully capable health agent. You can control the entire dashboard through tools.
 
@@ -287,7 +309,7 @@ Tools available:
 - BOOK/CANCEL: book_appointment, cancel_appointment
 - UPDATE PROFILE: update_profile, add_medical_event, remove_medical_event, add_allergy, remove_allergy, set_checkup_date, add_favorite_clinic, remove_favorite_clinic
 - BENEFITS: add_benefit_provider, remove_benefit_provider (use "all" to wipe everything), update_benefit_usage, apply_employer_key
-- CALENDAR: add_to_calendar (after booking, call this proactively if user has Google Calendar connected)
+- CALENDAR: add_to_calendar (only if user explicitly asks — backend auto-syncs on every booking)
 - NAVIGATE: navigate_to (dashboard, health-profile, health-compass, benefits, settings, emergency)
 - UI: show_notification
 
@@ -419,9 +441,7 @@ function BenefitCard({ data }) {
 }
 
 function ApptCard({ data }) {
-  const date = data.date ? new Date(data.date).toLocaleDateString("en-CA", {
-    weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
-  }) : "TBD";
+  const date = data.date ? fmtToronto(data.date) : "TBD";
   return (
     <div className="chat-appt-card">
       <div className="chat-appt-icon">
@@ -739,7 +759,12 @@ export default function ChatbotWidget({
 
       case "get_appointments": {
         const liveAppointments = await getLiveAppointments();
-        return JSON.stringify(liveAppointments);
+        // Inject human-readable Toronto time so the AI never misreads UTC as local date
+        const annotated = liveAppointments.map((a) => ({
+          ...a,
+          displayDate: fmtToronto(a.date),
+        }));
+        return JSON.stringify(annotated);
       }
 
       case "find_clinics": {
@@ -768,7 +793,7 @@ export default function ChatbotWidget({
           date: toolInput.date,
           duration: toolInput.duration,
           status: "upcoming",
-          userId: authUser?.email || authUser?.uid || "user_demo_01",
+          userId: authUser?.uid || authUser?.email || "user_demo_01",
           userEmail: authUser?.email || "",
           userName: realUser.name,
         };

@@ -383,7 +383,7 @@ export default function HealthCompass({ onBookingComplete }) {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    userId: user?.email || user?.uid || "guest",
+                    userId: user?.uid || user?.email || "guest",
                     userEmail: user?.email || "demo@example.com",
                     userName: user?.fullName || "Patient",
                     clinicName: selectedClinic.name,
