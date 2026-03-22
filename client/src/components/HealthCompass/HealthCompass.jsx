@@ -71,6 +71,34 @@ function MapViewportController({ clinics, selectedClinic }) {
   return null;
 }
 
+/** Map uses a fixed viewport height; one paint + debounced window resize avoids jittery invalidateSize bursts. */
+function MapResizeFix() {
+  const map = useMap();
+  useEffect(() => {
+    let debounceTimer;
+    const fix = () => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        /* map may be unmounting */
+      }
+    };
+    const onResize = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fix, 150);
+    };
+    fix();
+    const raf = requestAnimationFrame(fix);
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(debounceTimer);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [map]);
+  return null;
+}
+
 export default function HealthCompass() {
   const [activeFilter, setActiveFilter] = useState("dental");
   const [query, setQuery] = useState("");
@@ -244,13 +272,13 @@ export default function HealthCompass() {
         <section className="card-surface health-compass-map">
           <h3>Health Compass Map</h3>
           <p>Tap a pin to view details and sync with the clinic panel.</p>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="health-compass-map-meta">
             {isLoading ? (
               <p>Loading {activeFilter === "pharmacy" ? "pharmacies" : activeFilter === "hospital" ? "hospitals" : activeFilter === "dental" ? "dental clinics" : activeFilter === "vision" ? "vision centers" : "locations"}...</p>
             ) : (
               <p>{loadMessage}</p>
             )}
-            {locationError && <p style={{ color: "#ef4444", fontSize: "0.85rem", margin: 0 }}>📍 {locationError}</p>}
+            {locationError && <p className="health-compass-map-meta-error">📍 {locationError}</p>}
           </div>
           
           <div className="map-frame-wrap health-compass-map-live">
@@ -264,6 +292,7 @@ export default function HealthCompass() {
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
+                <MapResizeFix />
                 <MapViewportController clinics={filteredClinics} selectedClinic={selectedClinic} />
                 
                 <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
@@ -304,7 +333,7 @@ export default function HealthCompass() {
           </div>
 
           {selectedClinic ? (
-            <article className="health-compass-selected" style={{ marginTop: "1.5rem" }}>
+            <article className="health-compass-selected">
               <h4>{selectedClinic.name}</h4>
               <p style={{ textTransform: "capitalize", color: "var(--text-secondary, #64748b)" }}>
                 {selectedClinic.type}
@@ -413,7 +442,7 @@ export default function HealthCompass() {
 
         <section className="card-surface health-compass-side">
           <h3>Nearby Clinics</h3>
-          <div className="list-stack">
+          <div className="health-compass-clinic-scroll list-stack" role="region" aria-label="Scrollable clinic list">
             {filteredClinics.map((clinic) => (
               <article
                 key={clinic.id}

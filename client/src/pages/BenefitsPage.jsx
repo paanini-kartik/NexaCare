@@ -7,6 +7,15 @@ function currency(amount) {
   return `$${amount.toLocaleString()}`;
 }
 
+/** 0–100: higher coverage → greener; lower → redder (red = worse, green = better). */
+function coverageHeatColor(percent) {
+  const p = Math.max(0, Math.min(100, Number(percent) || 0)) / 100;
+  const h = 142 * p;
+  const s = 58 + 22 * p;
+  const l = 34 - 8 * p;
+  return `hsl(${h.toFixed(0)} ${s.toFixed(0)}% ${l.toFixed(0)}%)`;
+}
+
 export default function BenefitsPage() {
   const { effectiveInsurers, benefitContextDescription, user, healthProfile, updateProfile } = useAuth();
 
@@ -21,7 +30,7 @@ export default function BenefitsPage() {
 
   if (!effectiveInsurers.length) {
     return (
-      <div className="page-flow">
+      <div className="page-flow benefits-page-flow">
         <header className="page-hero page-hero--alive">
           <h1>Benefits</h1>
           <p>
@@ -61,7 +70,7 @@ export default function BenefitsPage() {
   }));
 
   return (
-    <div className="page-flow">
+    <div className="page-flow benefits-page-flow">
       <header className="page-hero page-hero--alive">
         <h1>Benefits</h1>
         <p>
@@ -95,15 +104,22 @@ export default function BenefitsPage() {
                 </tr>
               </thead>
               <tbody>
-                {summaryByCategory.map((row) => (
-                  <tr key={row.name}>
-                    <td>{row.name}</td>
-                    <td>{row.avgCoverage}%</td>
-                    <td>{currency(row.limit)}</td>
-                    <td>{currency(row.used)}</td>
-                    <td>{currency(row.remaining)}</td>
-                  </tr>
-                ))}
+                {summaryByCategory.map((row) => {
+                  const covColor = coverageHeatColor(row.avgCoverage);
+                  return (
+                    <tr key={row.name}>
+                      <td>{row.name}</td>
+                      <td>
+                        <span className="benefit-coverage-pill" style={{ color: covColor, background: `${covColor}18` }}>
+                          {row.avgCoverage}%
+                        </span>
+                      </td>
+                      <td>{currency(row.limit)}</td>
+                      <td>{currency(row.used)}</td>
+                      <td>{currency(row.remaining)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -126,14 +142,18 @@ export default function BenefitsPage() {
                 const remaining = category.annualLimit - (category.used || 0);
                 const denom = category.annualLimit || 1;
                 const pct = Math.max(0, Math.min(100, Math.round((remaining / denom) * 100)));
+                const covPct = Math.round((category.coverage || 0) * 100);
+                const heat = coverageHeatColor(covPct);
                 return (
                   <div key={`${insurer.id}-${cidx}`} className="benefit-row">
                     <div className="benefit-top">
                       <span>{category.name}</span>
-                      <span>{Math.round(category.coverage * 100)}% coverage</span>
+                      <span className="benefit-coverage-label" style={{ color: heat }}>
+                        {covPct}% coverage
+                      </span>
                     </div>
-                    <div className="progress-track">
-                      <div style={{ width: `${pct}%` }} />
+                    <div className="progress-track progress-track--heat">
+                      <div style={{ width: `${pct}%`, background: heat }} />
                     </div>
                     <small>
                       {currency(remaining)} remaining of {currency(category.annualLimit)}

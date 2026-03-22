@@ -1,10 +1,37 @@
-import { Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarClock,
+  FileText,
+  HeartPulse,
+  MapPin,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { CARE_SERVICE_PRESETS, CHECKUP_TYPE_META, CORE_CHECKUP_KEYS } from "../data/checkupConfig";
 import { getCoreIntervalDays } from "../lib/cadence";
 
 const NO_EXTRAS = [];
+
+function ProfilePanel({ id, icon: Icon, title, subtitle, children }) {
+  return (
+    <section className="profile-panel" aria-labelledby={id}>
+      <header className="profile-panel-head">
+        <span className="profile-panel-icon" aria-hidden>
+          <Icon size={22} strokeWidth={1.75} />
+        </span>
+        <div className="profile-panel-titles">
+          <h2 id={id} className="profile-panel-title">
+            {title}
+          </h2>
+          {subtitle ? <p className="profile-panel-sub">{subtitle}</p> : null}
+        </div>
+      </header>
+      <div className="profile-panel-body">{children}</div>
+    </section>
+  );
+}
 
 function recommendationFromProfile(age, occupation, medicalHistory = []) {
   const parsedAge = Number(age || 0);
@@ -182,13 +209,12 @@ export default function HealthProfilePage() {
         </p>
       </header>
 
-      <section className="profile-cadence-first" aria-labelledby="cadence-heading">
-        <h2 id="cadence-heading" className="profile-block-title">
-          Your preventive cadence
-        </h2>
-        <p className="profile-cadence-sub">
-          Updates automatically when you change age, occupation, or medical history.
-        </p>
+      <ProfilePanel
+        id="cadence-heading"
+        icon={CalendarClock}
+        title="Your preventive cadence"
+        subtitle="Updates automatically when you change age, occupation, or medical history."
+      >
         <ul className="recommend-open-list profile-cadence-list">
           {recs.map((rec) => (
             <li key={rec.label}>
@@ -197,11 +223,11 @@ export default function HealthProfilePage() {
             </li>
           ))}
         </ul>
-      </section>
+      </ProfilePanel>
 
       <div className="profile-flow">
-        <section className="profile-section">
-          <h2 className="profile-block-title">Your information</h2>
+        <ProfilePanel id="your-info-heading" icon={UserRound} title="Your information">
+          <div className="profile-section profile-section--flush">
           <div className="form-grid profile-form-tight">
             <label className="form-field">
               Age
@@ -215,27 +241,31 @@ export default function HealthProfilePage() {
                 placeholder="e.g. Teacher"
               />
             </label>
-            <label className="form-field">
+            <label className="form-field form-field--calendar-provider profile-calendar-field">
               Calendar provider
               <select
-                value={healthProfile.calendarProvider}
-                onChange={(e) =>
+                className="profile-calendar-select"
+                value={healthProfile.calendarProvider || ""}
+                onChange={(e) => {
+                  const value = e.target.value;
                   updateProfile({
-                    calendarProvider: e.target.value,
-                    onboardingCalendarConnected: true,
-                  })
-                }
+                    calendarProvider: value,
+                    onboardingCalendarConnected: Boolean(value),
+                  });
+                }}
               >
-                <option>Google</option>
-                <option>Outlook</option>
-                <option>Apple</option>
+                <option value="">Choose a calendar provider</option>
+                <option value="Google">Google</option>
+                <option value="Outlook">Outlook</option>
+                <option value="Apple">Apple</option>
               </select>
             </label>
           </div>
-        </section>
+          </div>
+        </ProfilePanel>
 
-        <section className="profile-section">
-          <h3 className="profile-block-title profile-h3">Medical history</h3>
+        <ProfilePanel id="medical-history-heading" icon={FileText} title="Medical history">
+          <div className="profile-section profile-section--flush">
           <div className="form-grid profile-form-tight">
             <label className="form-field">
               Event date
@@ -296,10 +326,11 @@ export default function HealthProfilePage() {
               </details>
             ))}
           </div>
-        </section>
+          </div>
+        </ProfilePanel>
 
-        <section className="profile-section">
-          <h3 className="profile-block-title profile-h3">Allergies</h3>
+        <ProfilePanel id="allergies-heading" icon={AlertTriangle} title="Allergies">
+          <div className="profile-section profile-section--flush">
           <div className="form-grid profile-form-tight">
             <label className="form-field">
               Allergy name
@@ -349,10 +380,11 @@ export default function HealthProfilePage() {
               </article>
             ))}
           </div>
-        </section>
+          </div>
+        </ProfilePanel>
 
-        <section className="profile-section">
-          <h3 className="profile-block-title profile-h3">Favorite clinics</h3>
+        <ProfilePanel id="clinics-heading" icon={MapPin} title="Favorite clinics">
+          <div className="profile-section profile-section--flush">
           <div className="form-grid profile-form-tight">
             <label className="form-field">
               Clinic name
@@ -397,17 +429,16 @@ export default function HealthProfilePage() {
               </article>
             ))}
           </div>
-        </section>
+          </div>
+        </ProfilePanel>
 
-        <section className="profile-section profile-section--wellness" aria-labelledby="wellness-heading">
-          <h3 id="wellness-heading" className="profile-block-title profile-h3">
-            Visits &amp; optional services
-          </h3>
-          <p className="profile-wellness-lead">
-            Core checkup timing is computed from your profile. Add chiropractic, physio, yoga, massage, or anything
-            else—then log a last visit so rings match reality.
-          </p>
-
+        <ProfilePanel
+          id="wellness-heading"
+          icon={HeartPulse}
+          title="Visits & optional services"
+          subtitle="Core checkup timing follows your profile. Add services and log last visits so rings stay accurate."
+        >
+          <div className="profile-section profile-section--wellness profile-section--flush">
           <h4 className="profile-mini-heading">Core checkups — last visit</h4>
           <div className="profile-core-rows">
             {CORE_CHECKUP_KEYS.map((key) => {
@@ -494,7 +525,8 @@ export default function HealthProfilePage() {
               </ul>
             </>
           )}
-        </section>
+          </div>
+        </ProfilePanel>
       </div>
     </div>
   );
