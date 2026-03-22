@@ -19,11 +19,11 @@ export default function AuthPage() {
 
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
 
-  const onSubmit = (event) => {
+  const onSubmit = async (event) => {
     event.preventDefault();
 
     if (isSignup) {
-      login(
+      await login(
         {
           fullName: form.fullName,
           email: form.email,
@@ -34,7 +34,7 @@ export default function AuthPage() {
         { isSignup: true }
       );
     } else {
-      login(
+      await login(
         {
           email: form.email,
           password: form.password,

@@ -1,5 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { auth } from "../lib/firebase";
 import { CORE_CHECKUP_KEYS } from "../data/checkupConfig";
 import { SEED_ENTERPRISES, createEnterpriseFromSignup } from "../data/enterpriseDefaults";
 import { insurers as defaultInsurers } from "../data/mockData";
@@ -260,7 +262,19 @@ export function AuthProvider({ children }) {
     return parts.length ? parts.join(" · ") : "Combined mock carriers (default)";
   }, [benefitSources, enterprises]);
 
-  const login = (identity, options = { isSignup: false }) => {
+  const login = async (identity, options = { isSignup: false }) => {
+    // Firebase Auth — runs alongside existing localStorage logic
+    try {
+      if (options.isSignup) {
+        await createUserWithEmailAndPassword(auth, identity.email, identity.password || "nexacare123");
+      } else {
+        await signInWithEmailAndPassword(auth, identity.email, identity.password || "nexacare123");
+      }
+    } catch (firebaseError) {
+      // Non-blocking — if Firebase fails, app still works with localStorage
+      console.warn("Firebase auth:", firebaseError.code);
+    }
+
     const emailKey = normEmail(identity.email);
     const registry = readRegistry();
     const existing = registry[emailKey] ? migrateLegacyUser(registry[emailKey]) : null;
@@ -641,6 +655,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setShowOnboardingOverlay(false);
     localStorage.removeItem(USER_KEY);
+    signOut(auth).catch(() => {}); // Firebase sign out — non-blocking
   };
 
   const updateProfile = (updates) => {
