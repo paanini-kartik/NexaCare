@@ -1470,6 +1470,13 @@ a { text-decoration: none; color: inherit; }
   gap: 0.25rem;
   font-size: 0.9rem;
 }
+.settings-work-position-row {
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
 .settings-key-meta {
   font-size: 0.8rem;
   color: var(--body);

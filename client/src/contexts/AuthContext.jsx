@@ -1,10 +1,33 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { CORE_CHECKUP_KEYS } from "../data/checkupConfig";
-import { SEED_ENTERPRISES, createEnterpriseFromSignup } from "../data/enterpriseDefaults";
-import { insurers as defaultInsurers } from "../data/mockData";
+import { createEnterpriseFromSignup } from "../data/enterpriseDefaults";
+import { cloneManualProvidersForFamilyMerge } from "../lib/manualBenefitDefaults";
+import { serializeMemberWorkAssignments } from "../lib/memberWorkShare";
 import { makeEmployerInviteKey, makeFamilyJoinKey } from "../lib/connectionKeys";
 import { getEffectiveInsurers, resolveBenefitSources, summarizeInsurersForDashboard } from "../lib/enterpriseBenefits";
+import { getFirebaseAuth, getFirestoreDb, isFirebaseConfigured } from "../lib/firebase";
+import {
+  ensureEmailLookup,
+  loadSessionMetaFromFirestore,
+  loadUserDocument,
+  normEmail,
+  saveSessionMetaToFirestore,
+  saveUserDocument,
+  setEmailLookup,
+  updateRemoteUserProfileByEmail,
+} from "../lib/firestoreSync";
+import {
+  emptySessionMeta,
+  mergeEmployerKeyLists,
+  mergeSessionMetaEnterpriseDirectory,
+  mergeSessionMetaViewsForClient,
+  normalizeSessionMeta,
+} from "../lib/sessionMetaModel";
+
+const USE_FIREBASE = isFirebaseConfigured();
 
 const USER_KEY = "nexacare:user";
 const SESSION_META_KEY = "nexacare:session-meta";
@@ -13,12 +36,6 @@ const PROFILE_KEY = "nexacare:profile";
 const ONBOARDING_KEY = "nexacare:onboarding-complete";
 const ENTERPRISES_KEY = "nexacare:enterprises";
 const HOUSEHOLD_KEY = "nexacare:household";
-
-function normEmail(email) {
-  return String(email || "")
-    .trim()
-    .toLowerCase();
-}
 
 function readRegistry() {
   const raw = readStorage(USER_REGISTRY_KEY, null);
@@ -50,9 +67,8 @@ function readStorage(key, fallback) {
 
 function loadEnterprises() {
   const raw = readStorage(ENTERPRISES_KEY, null);
-  if (Array.isArray(raw) && raw.length) return raw;
-  localStorage.setItem(ENTERPRISES_KEY, JSON.stringify(SEED_ENTERPRISES));
-  return [...SEED_ENTERPRISES];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((e) => e && e.id !== "ent-sample");
 }
 
 function loadHousehold() {
@@ -68,10 +84,44 @@ function loadHousehold() {
 }
 
 function loadSessionMeta() {
-  const raw = readStorage(SESSION_META_KEY, null);
+  return normalizeSessionMeta(readStorage(SESSION_META_KEY, null));
+}
+
+/** Member employment only — employer accounts use enterpriseId for their organization, not jobs. */
+function normalizeMemberWorkAssignments(raw) {
+  // Explicit array (including empty) wins — do not fall back to legacy flat fields when clearing all jobs.
+  if (Array.isArray(raw.workAssignments)) {
+    return raw.workAssignments
+      .filter((w) => w && w.enterpriseId && w.roleTemplateId)
+      .map((w, i) => ({
+        id: String(w.id || `wa-${i}-${w.enterpriseId}`),
+        enterpriseId: w.enterpriseId,
+        roleTemplateId: w.roleTemplateId,
+        locked: Boolean(w.locked),
+      }));
+  }
+  if (raw.enterpriseId && raw.employeeRoleTemplateId) {
+    return [
+      {
+        id: "wa-legacy",
+        enterpriseId: raw.enterpriseId,
+        roleTemplateId: raw.employeeRoleTemplateId,
+        locked: Boolean(raw.employerAssignmentLocked),
+      },
+    ];
+  }
+  return [];
+}
+
+function syncMemberWorkAssignmentFlatFields(userObj) {
+  const wa = normalizeMemberWorkAssignments(userObj);
+  const first = wa[0];
   return {
-    families: raw?.families && typeof raw.families === "object" ? raw.families : {},
-    employerKeys: Array.isArray(raw?.employerKeys) ? raw.employerKeys : [],
+    ...userObj,
+    workAssignments: wa,
+    enterpriseId: first?.enterpriseId ?? null,
+    employeeRoleTemplateId: first?.roleTemplateId ?? null,
+    employerAssignmentLocked: wa.some((w) => w.locked),
   };
 }
 
@@ -84,28 +134,42 @@ function migrateLegacyUser(raw) {
         : raw.accountType === "family" || raw.accountType === "employee" || raw.accountType === "member"
           ? "member"
           : "member";
-    return {
+    const base = {
       ...raw,
       accountType: at,
       familyRole: raw.familyRole || "owner",
       companyLinkCode: raw.companyLinkCode ?? null,
       familyId: raw.familyId ?? null,
       connectionKeysCount: typeof raw.connectionKeysCount === "number" ? raw.connectionKeysCount : 0,
-      employerAssignmentLocked: Boolean(raw.employerAssignmentLocked),
+      manualBenefitProviders: Array.isArray(raw.manualBenefitProviders) ? raw.manualBenefitProviders : [],
     };
+    if (at === "employer") {
+      return {
+        ...base,
+        workAssignments: [],
+        employerAssignmentLocked: Boolean(raw.employerAssignmentLocked),
+      };
+    }
+    return syncMemberWorkAssignmentFlatFields(base);
   }
   const legacy = raw.role === "employer" ? "employer" : "member";
-  return {
+  const base = {
     ...raw,
     accountType: legacy,
     familyRole: raw.familyRole || "owner",
-    enterpriseId: raw.enterpriseId ?? null,
-    employeeRoleTemplateId: raw.employeeRoleTemplateId ?? null,
     companyLinkCode: raw.companyLinkCode ?? null,
     familyId: raw.familyId ?? null,
     connectionKeysCount: typeof raw.connectionKeysCount === "number" ? raw.connectionKeysCount : 0,
-    employerAssignmentLocked: Boolean(raw.employerAssignmentLocked),
+    manualBenefitProviders: Array.isArray(raw.manualBenefitProviders) ? raw.manualBenefitProviders : [],
   };
+  if (legacy === "employer") {
+    return {
+      ...base,
+      workAssignments: [],
+      employerAssignmentLocked: Boolean(raw.employerAssignmentLocked),
+    };
+  }
+  return syncMemberWorkAssignmentFlatFields(base);
 }
 
 function migrateCoreRow(row) {
@@ -156,6 +220,12 @@ function normalizeExtraCareServices(raw) {
     });
 }
 
+function stripUid(profile) {
+  if (!profile || typeof profile !== "object") return profile;
+  const { uid: _uid, ...rest } = profile;
+  return rest;
+}
+
 function normalizeProfile(rawProfile) {
   const medicalHistory = Array.isArray(rawProfile?.medicalHistory) ? rawProfile.medicalHistory : [];
   const allergies = Array.isArray(rawProfile?.allergies) ? rawProfile.allergies : [];
@@ -174,27 +244,135 @@ function normalizeProfile(rawProfile) {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => migrateLegacyUser(readStorage(USER_KEY, null)));
-  const [enterprises, setEnterprises] = useState(() => loadEnterprises());
-  const [household, setHouseholdState] = useState(() => loadHousehold());
-  const [sessionMeta, setSessionMeta] = useState(() => loadSessionMeta());
-  const [healthProfile, setHealthProfile] = useState(() => normalizeProfile(readStorage(PROFILE_KEY, {})));
+  const [user, setUser] = useState(() => (USE_FIREBASE ? null : migrateLegacyUser(readStorage(USER_KEY, null))));
+  const [firebaseUid, setFirebaseUid] = useState(null);
+  const [authReady, setAuthReady] = useState(() => !USE_FIREBASE);
+  const [enterprises, setEnterprises] = useState(() => (USE_FIREBASE ? [] : loadEnterprises()));
+  const [household, setHouseholdState] = useState(() =>
+    USE_FIREBASE
+      ? { enterpriseId: null, sharedBenefitRoleId: null, familyLinkCode: "" }
+      : loadHousehold()
+  );
+  const [sessionMeta, setSessionMeta] = useState(() => (USE_FIREBASE ? emptySessionMeta() : loadSessionMeta()));
+  const [healthProfile, setHealthProfile] = useState(() =>
+    USE_FIREBASE ? normalizeProfile({}) : normalizeProfile(readStorage(PROFILE_KEY, {}))
+  );
   const [showOnboardingOverlay, setShowOnboardingOverlay] = useState(false);
 
-  const persistSessionMeta = useCallback((next) => {
-    setSessionMeta(next);
-    localStorage.setItem(SESSION_META_KEY, JSON.stringify(next));
+  useEffect(() => {
+    if (!USE_FIREBASE) {
+      setAuthReady(true);
+      return undefined;
+    }
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      setAuthReady(true);
+      return undefined;
+    }
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      try {
+        if (!firebaseUser) {
+          setUser(null);
+          setFirebaseUid(null);
+          setSessionMeta(emptySessionMeta());
+          setHealthProfile(normalizeProfile({}));
+          setHouseholdState({ enterpriseId: null, sharedBenefitRoleId: null, familyLinkCode: "" });
+          setEnterprises([]);
+          setShowOnboardingOverlay(false);
+          return;
+        }
+        setFirebaseUid(firebaseUser.uid);
+        const data = await loadUserDocument(firebaseUser.uid);
+        if (!data) {
+          console.warn("NexaCare: missing Firestore user profile; signing out.");
+          await signOut(auth);
+          return;
+        }
+        const mergedProfile = migrateLegacyUser({
+          ...data.profile,
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || data.profile?.email,
+        });
+        setUser(mergedProfile);
+        setHealthProfile(normalizeProfile(data.healthProfile || {}));
+        setHouseholdState(
+          data.household && typeof data.household === "object"
+            ? {
+                enterpriseId: data.household.enterpriseId ?? null,
+                sharedBenefitRoleId: data.household.sharedBenefitRoleId ?? null,
+                familyLinkCode: data.household.familyLinkCode ?? "",
+              }
+            : { enterpriseId: null, sharedBenefitRoleId: null, familyLinkCode: "" }
+        );
+        const userEnts =
+          Array.isArray(data.enterprises) && data.enterprises.length
+            ? data.enterprises.filter((e) => e?.id !== "ent-sample")
+            : [];
+        setEnterprises(userEnts);
+        setShowOnboardingOverlay(data.onboardingComplete === false);
+        const sm = await loadSessionMetaFromFirestore();
+        const mergedSm = mergeSessionMetaEnterpriseDirectory(sm, userEnts);
+        setSessionMeta(mergedSm);
+        void saveSessionMetaToFirestore(mergedSm).catch((e) => {
+          console.warn("NexaCare: failed to sync enterprise directory on login", e);
+        });
+      } finally {
+        setAuthReady(true);
+      }
+    });
+    return () => unsub();
   }, []);
 
-  const persistEnterprises = useCallback((next) => {
-    setEnterprises(next);
-    localStorage.setItem(ENTERPRISES_KEY, JSON.stringify(next));
+  /** Always pass a function `(prev) => next` so reads merge with latest state (fixes benefit / family clobber bugs). */
+  const persistSessionMeta = useCallback((updater) => {
+    setSessionMeta((prev) => {
+      const prevNorm = normalizeSessionMeta(prev);
+      const next =
+        typeof updater === "function" ? normalizeSessionMeta(updater(prevNorm)) : normalizeSessionMeta(updater);
+      if (!USE_FIREBASE) {
+        try {
+          localStorage.setItem(SESSION_META_KEY, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+      } else {
+        void saveSessionMetaToFirestore(next).catch((e) => {
+          console.warn("NexaCare: failed to save session meta", e);
+        });
+      }
+      return next;
+    });
   }, []);
 
-  const persistHousehold = useCallback((next) => {
-    setHouseholdState(next);
-    localStorage.setItem(HOUSEHOLD_KEY, JSON.stringify(next));
-  }, []);
+  const persistEnterprises = useCallback(
+    (next) => {
+      setEnterprises(next);
+      if (!USE_FIREBASE) {
+        localStorage.setItem(ENTERPRISES_KEY, JSON.stringify(next));
+      } else if (firebaseUid) {
+        void saveUserDocument(firebaseUid, { enterprises: next }).catch((e) => {
+          console.warn("NexaCare: failed to save enterprises", e);
+        });
+      }
+      persistSessionMeta((prev) => mergeSessionMetaEnterpriseDirectory(prev, next));
+    },
+    [firebaseUid, persistSessionMeta]
+  );
+
+  const persistHousehold = useCallback(
+    (next) => {
+      setHouseholdState(next);
+      if (!USE_FIREBASE) {
+        localStorage.setItem(HOUSEHOLD_KEY, JSON.stringify(next));
+        return;
+      }
+      if (!firebaseUid) return;
+      void saveUserDocument(firebaseUid, { household: next }).catch((e) => {
+        console.warn("NexaCare: failed to save household", e);
+      });
+    },
+    [firebaseUid]
+  );
 
   /** Family owners: household benefit schedule mirrors employer-key work assignment (no manual UI). */
   useEffect(() => {
@@ -222,6 +400,58 @@ export function AuthProvider({ children }) {
     persistHousehold,
   ]);
 
+  /** Publish this user's employer-linked jobs to the family doc so every member resolves the same plans. */
+  useEffect(() => {
+    if (!user?.familyId || user.accountType !== "member") return;
+    if (user.familyRole !== "owner" && user.familyRole !== "contributor") return;
+
+    persistSessionMeta((prevSm) => {
+      const fam = prevSm.families?.[user.familyId];
+      if (!fam) return prevSm;
+      const em = normEmail(user.email);
+      const slice = serializeMemberWorkAssignments(user);
+      const prev = fam.memberWorkSchedules?.[em];
+      if (JSON.stringify(prev || []) === JSON.stringify(slice)) return prevSm;
+      return {
+        ...prevSm,
+        families: {
+          ...prevSm.families,
+          [fam.id]: {
+            ...fam,
+            memberWorkSchedules: { ...(fam.memberWorkSchedules || {}), [em]: slice },
+          },
+        },
+      };
+    });
+  }, [
+    persistSessionMeta,
+    user?.familyId,
+    user?.familyRole,
+    user?.accountType,
+    user?.email,
+    user?.workAssignments,
+    user?.enterpriseId,
+    user?.employeeRoleTemplateId,
+    user?.employerAssignmentLocked,
+  ]);
+
+  /** Owned enterprises (user doc) + shared directory (Firestore session meta) for linked employers. */
+  const resolvedEnterprises = useMemo(() => {
+    const map = new Map();
+    for (const e of enterprises) {
+      if (e?.id) map.set(e.id, e);
+    }
+    const dir = sessionMeta.enterpriseDirectory;
+    if (dir && typeof dir === "object") {
+      for (const ent of Object.values(dir)) {
+        if (ent && typeof ent === "object" && ent.id && !map.has(ent.id)) {
+          map.set(ent.id, ent);
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [enterprises, sessionMeta.enterpriseDirectory]);
+
   const myEnterprise = useMemo(() => {
     if (!user?.enterpriseId) return null;
     return enterprises.find((e) => e.id === user.enterpriseId) || null;
@@ -233,178 +463,307 @@ export function AuthProvider({ children }) {
   }, [user?.familyId, sessionMeta.families]);
 
   const benefitSources = useMemo(
-    () => resolveBenefitSources(user, household, myEnterprise),
-    [user, household, myEnterprise]
+    () => resolveBenefitSources(user, household, myEnterprise, sessionMeta),
+    [user, household, myEnterprise, sessionMeta]
   );
 
   const effectiveInsurers = useMemo(
-    () => getEffectiveInsurers(defaultInsurers, benefitSources, enterprises),
-    [benefitSources, enterprises]
+    () => getEffectiveInsurers(benefitSources, resolvedEnterprises),
+    [benefitSources, resolvedEnterprises]
   );
 
   const benefitDashboardSummary = useMemo(() => summarizeInsurersForDashboard(effectiveInsurers), [effectiveInsurers]);
 
   const benefitContextDescription = useMemo(() => {
-    if (!benefitSources.length) return "Combined mock carriers (default)";
+    if (!benefitSources.length) return "";
     const parts = benefitSources
       .map((res) => {
-        const ent = enterprises.find((e) => e.id === res.enterpriseId);
-        const role = ent?.employeeRoles.find((r) => r.id === res.roleId);
-        if (!ent || !role) return null;
-        if (res.kind === "household") return `${ent.name} — ${role.name} (household · from keys)`;
-        if (res.kind === "work") return `${ent.name} — ${role.name} (work)`;
-        if (res.kind === "employer_preview") return `${ent.name} — ${role.name} (preview)`;
-        return `${ent.name} — ${role.name}`;
+        if (res.kind === "manual" && res.manual) {
+          return `${res.manual.provider} — ${res.manual.plan}`;
+        }
+        const ent = resolvedEnterprises.find((e) => e.id === res.enterpriseId);
+        if (!ent) return null;
+        if (res.kind === "household") return `${ent.name} (household)`;
+        if (res.kind === "work") return `${ent.name} (work)`;
+        if (res.kind === "employer_preview") return `${ent.name} (preview)`;
+        return ent.name;
       })
       .filter(Boolean);
-    return parts.length ? parts.join(" · ") : "Combined mock carriers (default)";
-  }, [benefitSources, enterprises]);
+    return parts.length ? parts.join(" · ") : "";
+  }, [benefitSources, resolvedEnterprises]);
 
-  const login = (identity, options = { isSignup: false }) => {
-    const emailKey = normEmail(identity.email);
-    const registry = readRegistry();
-    const existing = registry[emailKey] ? migrateLegacyUser(registry[emailKey]) : null;
+  const login = useCallback(
+    async (identity, options = { isSignup: false }) => {
+      const pwd = String(identity.password || "");
+      if (!pwd) throw new Error("Password is required");
 
-    if (options.isSignup) {
-      const isEmployer = Boolean(identity.isEmployer);
+      if (USE_FIREBASE) {
+        const auth = getFirebaseAuth();
+        if (!auth) throw new Error("Firebase is not initialized");
+        const email = normEmail(identity.email);
 
-      if (isEmployer) {
-        const org = createEnterpriseFromSignup({
-          name: identity.companyName || "Organization",
-          ownerEmail: identity.email,
-        });
-        persistEnterprises([...enterprises, org]);
-        const enterpriseId = org.id;
-        const employeeRoleTemplateId = org.employeeRoles[0]?.id ?? null;
+        if (options.isSignup) {
+          const cred = await createUserWithEmailAndPassword(auth, email, pwd);
+          const uid = cred.user.uid;
+          let nextEnterprises = [...enterprises];
+          let safeUser;
 
-        const safeUser = migrateLegacyUser({
-          fullName: identity.fullName || "User",
-          email: identity.email,
-          accountType: "employer",
-          familyRole: "owner",
-          enterpriseId,
-          employeeRoleTemplateId,
-          companyLinkCode: null,
-          familyId: null,
-          connectionKeysCount: 0,
-          employerAssignmentLocked: false,
-        });
+          if (identity.isEmployer) {
+            const org = createEnterpriseFromSignup({
+              name: identity.companyName || "Organization",
+              ownerEmail: identity.email,
+            });
+            nextEnterprises = [...nextEnterprises, org];
+            const enterpriseId = org.id;
+            const employeeRoleTemplateId = org.employeeRoles[0]?.id ?? null;
+            safeUser = migrateLegacyUser({
+              fullName: identity.fullName || "User",
+              email: identity.email,
+              accountType: "employer",
+              familyRole: "owner",
+              enterpriseId,
+              employeeRoleTemplateId,
+              companyLinkCode: null,
+              familyId: null,
+              connectionKeysCount: 0,
+              employerAssignmentLocked: false,
+            });
+          } else {
+            safeUser = migrateLegacyUser({
+              fullName: identity.fullName || "User",
+              email: identity.email,
+              accountType: "member",
+              familyRole: "owner",
+              enterpriseId: null,
+              employeeRoleTemplateId: null,
+              companyLinkCode: null,
+              familyId: null,
+              connectionKeysCount: 0,
+              employerAssignmentLocked: false,
+            });
+          }
 
-        setUser(safeUser);
-        localStorage.setItem(USER_KEY, JSON.stringify(safeUser));
-        saveUserToRegistry(safeUser);
+          await saveUserDocument(uid, {
+            profile: stripUid(safeUser),
+            healthProfile: normalizeProfile({}),
+            household: { enterpriseId: null, sharedBenefitRoleId: null, familyLinkCode: "" },
+            onboardingComplete: false,
+            enterprises: nextEnterprises,
+          });
+          await setEmailLookup(email, uid);
+          if (identity.isEmployer && nextEnterprises.length) {
+            const sm = await loadSessionMetaFromFirestore();
+            const mergedSm = mergeSessionMetaEnterpriseDirectory(sm, nextEnterprises);
+            await saveSessionMetaToFirestore(mergedSm);
+          }
+          return;
+        }
+
+        await signInWithEmailAndPassword(auth, email, pwd);
+        const credUser = auth.currentUser;
+        if (credUser) await ensureEmailLookup(credUser.uid, email);
+        return;
+      }
+
+      const emailKey = normEmail(identity.email);
+      const registry = readRegistry();
+      const existing = registry[emailKey] ? migrateLegacyUser(registry[emailKey]) : null;
+
+      if (options.isSignup) {
+        const isEmployer = Boolean(identity.isEmployer);
+
+        if (isEmployer) {
+          const org = createEnterpriseFromSignup({
+            name: identity.companyName || "Organization",
+            ownerEmail: identity.email,
+          });
+          persistEnterprises([...enterprises, org]);
+          const enterpriseId = org.id;
+          const employeeRoleTemplateId = org.employeeRoles[0]?.id ?? null;
+
+          const safeUser = migrateLegacyUser({
+            fullName: identity.fullName || "User",
+            email: identity.email,
+            accountType: "employer",
+            familyRole: "owner",
+            enterpriseId,
+            employeeRoleTemplateId,
+            companyLinkCode: null,
+            familyId: null,
+            connectionKeysCount: 0,
+            employerAssignmentLocked: false,
+          });
+
+          setUser(safeUser);
+          localStorage.setItem(USER_KEY, JSON.stringify(safeUser));
+          saveUserToRegistry(safeUser);
+        } else {
+          const safeUser = migrateLegacyUser({
+            fullName: identity.fullName || "User",
+            email: identity.email,
+            accountType: "member",
+            familyRole: "owner",
+            enterpriseId: null,
+            employeeRoleTemplateId: null,
+            companyLinkCode: null,
+            familyId: null,
+            connectionKeysCount: 0,
+            employerAssignmentLocked: false,
+          });
+
+          setUser(safeUser);
+          localStorage.setItem(USER_KEY, JSON.stringify(safeUser));
+          saveUserToRegistry(safeUser);
+        }
       } else {
-        const safeUser = migrateLegacyUser({
-          fullName: identity.fullName || "User",
-          email: identity.email,
-          accountType: "member",
-          familyRole: "owner",
-          enterpriseId: null,
-          employeeRoleTemplateId: null,
-          companyLinkCode: null,
-          familyId: null,
-          connectionKeysCount: 0,
-          employerAssignmentLocked: false,
-        });
+        let safeUser;
+        if (existing) {
+          safeUser = migrateLegacyUser({
+            ...existing,
+            fullName: existing.fullName || "User",
+            email: identity.email,
+          });
+        } else {
+          const fromEmail = String(identity.email || "").split("@")[0]?.trim() || "";
+          safeUser = migrateLegacyUser({
+            fullName: fromEmail || "User",
+            email: identity.email,
+            accountType: "member",
+            familyRole: "owner",
+            enterpriseId: null,
+            employeeRoleTemplateId: null,
+            companyLinkCode: null,
+            familyId: null,
+            connectionKeysCount: 0,
+            employerAssignmentLocked: false,
+          });
+        }
 
         setUser(safeUser);
         localStorage.setItem(USER_KEY, JSON.stringify(safeUser));
         saveUserToRegistry(safeUser);
       }
-    } else {
-      let safeUser;
-      if (existing) {
-        safeUser = migrateLegacyUser({
-          ...existing,
-          fullName: existing.fullName || "User",
-          email: identity.email,
-        });
-      } else {
-        const fromEmail = String(identity.email || "").split("@")[0]?.trim() || "";
-        safeUser = migrateLegacyUser({
-          fullName: fromEmail || "User",
-          email: identity.email,
-          accountType: "member",
-          familyRole: "owner",
-          enterpriseId: null,
-          employeeRoleTemplateId: null,
-          companyLinkCode: null,
-          familyId: null,
-          connectionKeysCount: 0,
-          employerAssignmentLocked: false,
-        });
+
+      const hasCompletedOnboarding = localStorage.getItem(ONBOARDING_KEY) === "true";
+      if (options.isSignup && !hasCompletedOnboarding) {
+        setShowOnboardingOverlay(true);
       }
+    },
+    [enterprises, persistEnterprises]
+  );
 
-      setUser(safeUser);
-      localStorage.setItem(USER_KEY, JSON.stringify(safeUser));
-      saveUserToRegistry(safeUser);
-    }
-
-    const hasCompletedOnboarding = localStorage.getItem(ONBOARDING_KEY) === "true";
-    if (options.isSignup && !hasCompletedOnboarding) {
-      setShowOnboardingOverlay(true);
-    }
-  };
-
-  const updateUser = useCallback((partial) => {
-    setUser((prev) => {
-      if (!prev) return null;
-      const next = migrateLegacyUser({ ...prev, ...partial });
-      localStorage.setItem(USER_KEY, JSON.stringify(next));
-      saveUserToRegistry(next);
-      return next;
-    });
-  }, []);
+  const updateUser = useCallback(
+    (partial) => {
+      setUser((prev) => {
+        if (!prev) return null;
+        const next = migrateLegacyUser({ ...prev, ...partial });
+        if (!USE_FIREBASE) {
+          localStorage.setItem(USER_KEY, JSON.stringify(next));
+          saveUserToRegistry(next);
+        } else if (firebaseUid) {
+          void saveUserDocument(firebaseUid, { profile: stripUid(next) }).catch((e) => {
+            console.warn("NexaCare: failed to save profile", e);
+          });
+        }
+        return next;
+      });
+    },
+    [firebaseUid]
+  );
 
   const createFamilyGroup = useCallback(() => {
     if (!user || user.accountType !== "member" || user.familyId) return { ok: false, error: "Already in a family" };
     const id = `fam-${Date.now().toString(36)}`;
     const joinKey = makeFamilyJoinKey();
-    const nextMeta = {
-      ...sessionMeta,
+    const personal = Array.isArray(user.manualBenefitProviders) ? user.manualBenefitProviders : [];
+    const seededProviders = personal.length ? cloneManualProvidersForFamilyMerge(personal) : [];
+    const em = normEmail(user.email);
+    const ws = serializeMemberWorkAssignments(user);
+    const memberWorkSchedules = ws.length ? { [em]: ws } : {};
+    persistSessionMeta((prev) => ({
+      ...prev,
       families: {
-        ...sessionMeta.families,
+        ...prev.families,
         [id]: {
           id,
           joinKey,
-          ownerEmail: normEmail(user.email),
+          ownerEmail: em,
           members: [{ email: user.email, familyRole: "owner" }],
+          manualProviders: seededProviders,
+          memberWorkSchedules,
         },
       },
-    };
-    persistSessionMeta(nextMeta);
+    }));
     updateUser({
       familyId: id,
       familyRole: "owner",
       connectionKeysCount: (user.connectionKeysCount || 0) + 1,
+      ...(personal.length ? { manualBenefitProviders: [] } : {}),
     });
     return { ok: true, joinKey };
-  }, [user, sessionMeta, persistSessionMeta, updateUser]);
+  }, [user, persistSessionMeta, updateUser]);
 
   const joinFamilyWithKey = useCallback(
-    (joinKeyInput, joinRole) => {
+    async (joinKeyInput, joinRole) => {
       if (!user || user.accountType !== "member") return { ok: false, error: "Not available" };
       if (user.familyId) return { ok: false, error: "Already in a family" };
       if (!["contributor", "dependent"].includes(joinRole)) return { ok: false, error: "Choose contributor or dependent" };
       const k = String(joinKeyInput || "").trim().toUpperCase();
-      const fam = Object.values(sessionMeta.families).find((f) => f.joinKey.toUpperCase() === k);
-      if (!fam) return { ok: false, error: "Invalid family key" };
-      if (fam.members.some((m) => normEmail(m.email) === normEmail(user.email))) {
-        return { ok: false, error: "Already in this family" };
+      const personal = Array.isArray(user.manualBenefitProviders) ? user.manualBenefitProviders : [];
+      let userPatch = { familyId: null, familyRole: joinRole };
+      let errorOut = null;
+
+      let fresh = null;
+      if (USE_FIREBASE) {
+        try {
+          fresh = await loadSessionMetaFromFirestore();
+        } catch (e) {
+          console.warn("NexaCare: failed to load session meta for join", e);
+          return { ok: false, error: "Could not load shared data. Try again." };
+        }
       }
-      const nextMembers = [...fam.members, { email: user.email, familyRole: joinRole }];
-      const nextMeta = {
-        ...sessionMeta,
-        families: {
-          ...sessionMeta.families,
-          [fam.id]: { ...fam, members: nextMembers },
-        },
-      };
-      persistSessionMeta(nextMeta);
-      updateUser({ familyId: fam.id, familyRole: joinRole });
+
+      persistSessionMeta((prev) => {
+        const merged = fresh ? mergeSessionMetaViewsForClient(fresh, prev) : normalizeSessionMeta(prev);
+        const fam = Object.values(merged.families).find((f) => String(f.joinKey || "").trim().toUpperCase() === k);
+        if (!fam) {
+          errorOut = errorOut || "Invalid family key";
+          return merged;
+        }
+        if (fam.members.some((m) => normEmail(m.email) === normEmail(user.email))) {
+          errorOut = errorOut || "Already in this family";
+          return merged;
+        }
+        let manualProviders = fam.manualProviders || [];
+        userPatch = { familyId: fam.id, familyRole: joinRole };
+        if (joinRole === "contributor" && personal.length) {
+          manualProviders = [...manualProviders, ...cloneManualProvidersForFamilyMerge(personal)];
+          userPatch.manualBenefitProviders = [];
+        }
+        const emJoin = normEmail(user.email);
+        const nextSchedules = { ...(fam.memberWorkSchedules || {}) };
+        if (joinRole === "contributor") {
+          nextSchedules[emJoin] = serializeMemberWorkAssignments(user);
+        } else {
+          delete nextSchedules[emJoin];
+        }
+        const nextMembers = [...fam.members, { email: user.email, familyRole: joinRole }];
+        errorOut = null;
+        return {
+          ...merged,
+          families: {
+            ...merged.families,
+            [fam.id]: { ...fam, members: nextMembers, manualProviders, memberWorkSchedules: nextSchedules },
+          },
+        };
+      });
+
+      if (errorOut) return { ok: false, error: errorOut };
+      if (!userPatch.familyId) return { ok: false, error: "Invalid family key" };
+      updateUser(userPatch);
       return { ok: true };
     },
-    [user, sessionMeta, persistSessionMeta, updateUser]
+    [user, persistSessionMeta, updateUser]
   );
 
   const ownerSetFamilyMemberRole = useCallback(
@@ -412,120 +771,185 @@ export function AuthProvider({ children }) {
       if (!user?.familyId || user.familyRole !== "owner") return { ok: false, error: "Only the owner can assign roles" };
       if (!["contributor", "dependent"].includes(newRole)) return { ok: false, error: "Invalid role" };
       if (normEmail(targetEmail) === normEmail(user.email)) return { ok: false, error: "Cannot change your own role here" };
-      const fam = sessionMeta.families[user.familyId];
-      if (!fam) return { ok: false, error: "Family not found" };
-      const idx = fam.members.findIndex((m) => normEmail(m.email) === normEmail(targetEmail));
-      if (idx < 0) return { ok: false, error: "Member not in family" };
-      const nextMembers = fam.members.map((m, i) => (i === idx ? { ...m, familyRole: newRole } : m));
-      const nextMeta = {
-        ...sessionMeta,
-        families: {
-          ...sessionMeta.families,
-          [fam.id]: { ...fam, members: nextMembers },
-        },
-      };
-      persistSessionMeta(nextMeta);
-      const reg = readRegistry();
+      const fid = user.familyId;
       const te = normEmail(targetEmail);
-      if (reg[te]) {
-        reg[te] = migrateLegacyUser({ ...reg[te], familyRole: newRole });
-        writeRegistry(reg);
+      let ok = false;
+      persistSessionMeta((prev) => {
+        const fam = prev.families[fid];
+        if (!fam) return prev;
+        const idx = fam.members.findIndex((m) => normEmail(m.email) === te);
+        if (idx < 0) return prev;
+        ok = true;
+        const nextMembers = fam.members.map((m, i) => (i === idx ? { ...m, familyRole: newRole } : m));
+        const nextSchedules = { ...(fam.memberWorkSchedules || {}) };
+        if (newRole === "dependent") {
+          delete nextSchedules[te];
+        }
+        return {
+          ...prev,
+          families: {
+            ...prev.families,
+            [fam.id]: { ...fam, members: nextMembers, memberWorkSchedules: nextSchedules },
+          },
+        };
+      });
+      if (!ok) return { ok: false, error: "Member not in family" };
+      if (USE_FIREBASE) {
+        void updateRemoteUserProfileByEmail(te, { familyRole: newRole });
+      } else {
+        const reg = readRegistry();
+        if (reg[te]) {
+          reg[te] = migrateLegacyUser({ ...reg[te], familyRole: newRole });
+          writeRegistry(reg);
+        }
       }
       return { ok: true };
     },
-    [user, sessionMeta, persistSessionMeta]
+    [user, persistSessionMeta]
   );
 
   /** Solo owner only — deletes the family record. */
   const dissolveFamily = useCallback(() => {
     if (!user?.familyId || user.familyRole !== "owner") return { ok: false, error: "Only the owner can remove the family" };
-    const fam = sessionMeta.families[user.familyId];
-    if (!fam) return { ok: false, error: "Family not found" };
-    if (fam.members.length !== 1) {
-      return { ok: false, error: "Remove other members first, or transfer ownership—then you can leave or dissolve if alone" };
-    }
-    if (normEmail(fam.members[0].email) !== normEmail(user.email)) return { ok: false, error: "Invalid state" };
-    const nextFamilies = { ...sessionMeta.families };
-    delete nextFamilies[fam.id];
-    persistSessionMeta({ ...sessionMeta, families: nextFamilies });
+    const fid = user.familyId;
+    let err = null;
+    persistSessionMeta((prev) => {
+      const fam = prev.families[fid];
+      if (!fam) {
+        err = "Family not found";
+        return prev;
+      }
+      if (fam.members.length !== 1) {
+        err = "Remove other members first, or transfer ownership—then you can leave or dissolve if alone";
+        return prev;
+      }
+      if (normEmail(fam.members[0].email) !== normEmail(user.email)) {
+        err = "Invalid state";
+        return prev;
+      }
+      err = null;
+      const nextFamilies = { ...prev.families };
+      delete nextFamilies[fam.id];
+      return { ...prev, families: nextFamilies };
+    });
+    if (err) return { ok: false, error: err };
     updateUser({ familyId: null, familyRole: "owner" });
-    const reg = readRegistry();
-    const me = normEmail(user.email);
-    if (reg[me]) {
-      reg[me] = migrateLegacyUser({ ...reg[me], familyId: null, familyRole: "owner" });
-      writeRegistry(reg);
+    if (!USE_FIREBASE) {
+      const reg = readRegistry();
+      const me = normEmail(user.email);
+      if (reg[me]) {
+        reg[me] = migrateLegacyUser({ ...reg[me], familyId: null, familyRole: "owner" });
+        writeRegistry(reg);
+      }
     }
     return { ok: true };
-  }, [user, sessionMeta, persistSessionMeta, updateUser]);
+  }, [user, persistSessionMeta, updateUser]);
 
   /** Owner gives owner role to another member; previous owner becomes contributor. */
   const transferFamilyOwnership = useCallback(
     (newOwnerEmail) => {
       if (!user?.familyId || user.familyRole !== "owner") return { ok: false, error: "Only the owner can transfer" };
-      const fam = sessionMeta.families[user.familyId];
-      if (!fam || fam.members.length < 2) return { ok: false, error: "No other member to transfer to" };
+      const fid = user.familyId;
       const ne = normEmail(newOwnerEmail);
-      const target = fam.members.find((m) => normEmail(m.email) === ne);
-      if (!target || target.familyRole === "owner") return { ok: false, error: "Pick a contributor or dependent" };
-      if (ne === normEmail(user.email)) return { ok: false, error: "Choose someone else" };
       const me = normEmail(user.email);
-      const nextMembers = fam.members.map((m) => {
-        if (normEmail(m.email) === me) return { ...m, familyRole: "contributor" };
-        if (normEmail(m.email) === ne) return { ...m, familyRole: "owner" };
-        return m;
+      let err = null;
+      persistSessionMeta((prev) => {
+        const fam = prev.families[fid];
+        if (!fam || fam.members.length < 2) {
+          err = "No other member to transfer to";
+          return prev;
+        }
+        const target = fam.members.find((m) => normEmail(m.email) === ne);
+        if (!target || target.familyRole === "owner") {
+          err = "Pick a contributor or dependent";
+          return prev;
+        }
+        if (ne === me) {
+          err = "Choose someone else";
+          return prev;
+        }
+        err = null;
+        const nextMembers = fam.members.map((m) => {
+          if (normEmail(m.email) === me) return { ...m, familyRole: "contributor" };
+          if (normEmail(m.email) === ne) return { ...m, familyRole: "owner" };
+          return m;
+        });
+        return {
+          ...prev,
+          families: {
+            ...prev.families,
+            [fam.id]: { ...fam, members: nextMembers, ownerEmail: ne },
+          },
+        };
       });
-      const nextMeta = {
-        ...sessionMeta,
-        families: {
-          ...sessionMeta.families,
-          [fam.id]: { ...fam, members: nextMembers, ownerEmail: ne },
-        },
-      };
-      persistSessionMeta(nextMeta);
+      if (err) return { ok: false, error: err };
       updateUser({ familyRole: "contributor" });
-      const reg = readRegistry();
-      if (reg[me]) {
-        reg[me] = migrateLegacyUser({ ...reg[me], familyRole: "contributor" });
+      if (USE_FIREBASE) {
+        void (async () => {
+          await updateRemoteUserProfileByEmail(me, { familyRole: "contributor" });
+          await updateRemoteUserProfileByEmail(ne, { familyRole: "owner" });
+        })();
+      } else {
+        const reg = readRegistry();
+        if (reg[me]) {
+          reg[me] = migrateLegacyUser({ ...reg[me], familyRole: "contributor" });
+        }
+        if (reg[ne]) {
+          reg[ne] = migrateLegacyUser({ ...reg[ne], familyRole: "owner" });
+        }
+        writeRegistry(reg);
       }
-      if (reg[ne]) {
-        reg[ne] = migrateLegacyUser({ ...reg[ne], familyRole: "owner" });
-      }
-      writeRegistry(reg);
       return { ok: true };
     },
-    [user, sessionMeta, persistSessionMeta, updateUser]
+    [user, persistSessionMeta, updateUser]
   );
 
-  /** Non-owners leave; owners must transfer first or use dissolve when alone. */
+  /** Owners alone dissolve the family; owners with others must transfer first. Non-owners leave normally. */
   const leaveFamily = useCallback(() => {
     if (!user?.familyId) return { ok: false, error: "Not in a family" };
+    const fid = user.familyId;
     if (user.familyRole === "owner") {
-      const fam = sessionMeta.families[user.familyId];
-      if (fam?.members.length === 1) {
-        return { ok: false, error: "Use Remove family when you are the only member" };
+      const fam = sessionMeta.families[fid];
+      if (!fam) {
+        return { ok: false, error: "Family not found. Refresh the page and try again." };
       }
-      return { ok: false, error: "Transfer ownership first, then you can leave as a member" };
+      if (fam.members.length === 1) {
+        return dissolveFamily();
+      }
+      return { ok: false, error: "Transfer ownership first, then you can leave as a contributor." };
     }
-    const fam = sessionMeta.families[user.familyId];
-    if (!fam) return { ok: false, error: "Family not found" };
-    const nextMembers = fam.members.filter((m) => normEmail(m.email) !== normEmail(user.email));
-    const nextMeta = {
-      ...sessionMeta,
-      families: {
-        ...sessionMeta.families,
-        [fam.id]: { ...fam, members: nextMembers },
-      },
-    };
-    persistSessionMeta(nextMeta);
+    let err = null;
+    persistSessionMeta((prev) => {
+      const fam = prev.families[fid];
+      if (!fam) {
+        err = "Family not found";
+        return prev;
+      }
+      err = null;
+      const nextMembers = fam.members.filter((m) => normEmail(m.email) !== normEmail(user.email));
+      const leftEm = normEmail(user.email);
+      const nextSchedules = { ...(fam.memberWorkSchedules || {}) };
+      delete nextSchedules[leftEm];
+      return {
+        ...prev,
+        families: {
+          ...prev.families,
+          [fam.id]: { ...fam, members: nextMembers, memberWorkSchedules: nextSchedules },
+        },
+      };
+    });
+    if (err) return { ok: false, error: err };
     updateUser({ familyId: null, familyRole: "owner" });
-    const reg = readRegistry();
-    const me = normEmail(user.email);
-    if (reg[me]) {
-      reg[me] = migrateLegacyUser({ ...reg[me], familyId: null, familyRole: "owner" });
-      writeRegistry(reg);
+    if (!USE_FIREBASE) {
+      const reg = readRegistry();
+      const me = normEmail(user.email);
+      if (reg[me]) {
+        reg[me] = migrateLegacyUser({ ...reg[me], familyId: null, familyRole: "owner" });
+        writeRegistry(reg);
+      }
     }
     return { ok: true };
-  }, [user, sessionMeta, persistSessionMeta, updateUser]);
+  }, [user, sessionMeta, persistSessionMeta, updateUser, dissolveFamily]);
 
   const generateEmployerInviteKey = useCallback(
     (roleTemplateId) => {
@@ -537,32 +961,57 @@ export function AuthProvider({ children }) {
         roleTemplateId,
         createdByEmail: normEmail(user.email),
       };
-      const nextMeta = {
-        ...sessionMeta,
-        employerKeys: [...sessionMeta.employerKeys, entry],
-      };
-      persistSessionMeta(nextMeta);
+      persistSessionMeta((prev) => ({
+        ...prev,
+        employerKeys: [...prev.employerKeys, entry],
+      }));
       updateUser({ connectionKeysCount: (user.connectionKeysCount || 0) + 1 });
       return key;
     },
-    [user, sessionMeta, persistSessionMeta, updateUser]
+    [user, persistSessionMeta, updateUser]
   );
 
   const applyEmployerInviteKey = useCallback(
-    (keyInput) => {
+    async (keyInput) => {
       if (!user || user.accountType !== "member") return { ok: false, error: "Not available" };
-      if (user.employerAssignmentLocked) return { ok: false, error: "Your employer assignment is locked" };
       const k = String(keyInput || "").trim().toUpperCase();
-      const found = sessionMeta.employerKeys.find((e) => e.key.toUpperCase() === k);
+      let keys = sessionMeta.employerKeys;
+      if (USE_FIREBASE) {
+        try {
+          const fresh = await loadSessionMetaFromFirestore();
+          keys = mergeEmployerKeyLists(fresh.employerKeys, sessionMeta.employerKeys);
+        } catch (e) {
+          console.warn("NexaCare: failed to load session meta for employer key", e);
+          return { ok: false, error: "Could not verify key. Try again." };
+        }
+      }
+      const found = keys.find((e) => String(e.key || "").trim().toUpperCase() === k);
       if (!found) return { ok: false, error: "Invalid employer key" };
-      updateUser({
+      const existing = user.workAssignments || [];
+      if (existing.some((w) => w.enterpriseId === found.orgId && w.roleTemplateId === found.roleTemplateId)) {
+        return { ok: false, error: "This work position is already linked" };
+      }
+      const entry = {
+        id: `wa-${Date.now().toString(36)}`,
         enterpriseId: found.orgId,
-        employeeRoleTemplateId: found.roleTemplateId,
-        employerAssignmentLocked: true,
-      });
+        roleTemplateId: found.roleTemplateId,
+        locked: true,
+      };
+      updateUser({ workAssignments: [...existing, entry] });
       return { ok: true };
     },
-    [user, sessionMeta, updateUser]
+    [user, sessionMeta.employerKeys, updateUser]
+  );
+
+  const removeWorkPosition = useCallback(
+    (positionId) => {
+      if (!user || user.accountType !== "member") return { ok: false, error: "Not available" };
+      const next = (user.workAssignments || []).filter((w) => w.id !== positionId);
+      if (next.length === (user.workAssignments || []).length) return { ok: false, error: "Position not found" };
+      updateUser({ workAssignments: next });
+      return { ok: true };
+    },
+    [user, updateUser]
   );
 
   const updateEnterprise = useCallback(
@@ -577,28 +1026,80 @@ export function AuthProvider({ children }) {
     [enterprises, persistEnterprises]
   );
 
+  const appendEmployerInviteKey = useCallback(
+    (orgId, roleTemplateId) => {
+      if (!user || user.accountType !== "employer" || !orgId || !roleTemplateId) return;
+      let added = false;
+      persistSessionMeta((prev) => {
+        if (prev.employerKeys.some((k) => k.orgId === orgId && k.roleTemplateId === roleTemplateId)) return prev;
+        added = true;
+        const entry = {
+          key: makeEmployerInviteKey(),
+          orgId,
+          roleTemplateId,
+          createdByEmail: normEmail(user.email),
+        };
+        return { ...prev, employerKeys: [...prev.employerKeys, entry] };
+      });
+      if (added) {
+        updateUser({ connectionKeysCount: (user.connectionKeysCount || 0) + 1 });
+      }
+    },
+    [user, persistSessionMeta, updateUser]
+  );
+
+  /** Ensures every role template for the signed-in employer org has an invite key (backfill + idempotent). */
+  const ensureEmployerInviteKeysForMyOrg = useCallback(() => {
+    if (!user || user.accountType !== "employer" || !user.enterpriseId) return;
+    const ent = enterprises.find((e) => e.id === user.enterpriseId);
+    if (!ent?.employeeRoles?.length) return;
+    let added = 0;
+    persistSessionMeta((prev) => {
+      const missing = ent.employeeRoles.filter(
+        (r) => !prev.employerKeys.some((k) => k.orgId === ent.id && k.roleTemplateId === r.id)
+      );
+      if (!missing.length) return prev;
+      added = missing.length;
+      const nextKeys = [
+        ...prev.employerKeys,
+        ...missing.map((r) => ({
+          key: makeEmployerInviteKey(),
+          orgId: ent.id,
+          roleTemplateId: r.id,
+          createdByEmail: normEmail(user.email),
+        })),
+      ];
+      return { ...prev, employerKeys: nextKeys };
+    });
+    if (added) {
+      updateUser({ connectionKeysCount: (user.connectionKeysCount || 0) + added });
+    }
+  }, [user, enterprises, persistSessionMeta, updateUser]);
+
   const addEmployeeRole = useCallback(
     (enterpriseId, name) => {
+      const newRoleId = `${enterpriseId}-role-${Date.now().toString(36)}`;
       updateEnterprise(enterpriseId, (e) => {
-        const base = e.employeeRoles[0]?.categories?.length
-          ? e.employeeRoles[0].categories.map((c) => ({ ...c }))
-          : [];
+        const first = e.employeeRoles[0]?.categories;
+        const base = Array.isArray(first) && first.length ? first.map((c) => ({ ...c, used: 0 })) : [];
         const newRole = {
-          id: `${enterpriseId}-role-${Date.now().toString(36)}`,
+          id: newRoleId,
           name: name.trim() || "New role",
           categories: base,
         };
         return { ...e, employeeRoles: [...e.employeeRoles, newRole] };
       });
+      appendEmployerInviteKey(enterpriseId, newRoleId);
     },
-    [updateEnterprise]
+    [updateEnterprise, appendEmployerInviteKey]
   );
 
   const updateEmployeeRoleCategories = useCallback(
     (enterpriseId, roleId, categories) => {
+      const normalized = categories.map((c) => ({ ...c, used: 0 }));
       updateEnterprise(enterpriseId, (e) => ({
         ...e,
-        employeeRoles: e.employeeRoles.map((r) => (r.id === roleId ? { ...r, categories } : r)),
+        employeeRoles: e.employeeRoles.map((r) => (r.id === roleId ? { ...r, categories: normalized } : r)),
       }));
     },
     [updateEnterprise]
@@ -628,36 +1129,118 @@ export function AuthProvider({ children }) {
     [household, persistHousehold]
   );
 
-  const completeOnboardingOverlay = () => {
-    localStorage.setItem(ONBOARDING_KEY, "true");
+  const updateFamilyManualProviders = useCallback(
+    (providers) => {
+      const canShare = user?.familyRole === "owner" || user?.familyRole === "contributor";
+      if (!user?.familyId || !canShare) {
+        return {
+          ok: false,
+          error: "Only the family owner or a contributor can update shared benefit providers.",
+        };
+      }
+      const fid = user.familyId;
+      let ok = false;
+      persistSessionMeta((prev) => {
+        const fam = prev.families[fid];
+        if (!fam) return prev;
+        ok = true;
+        const normalized = (providers || []).map((p, i) => ({
+          ...p,
+          id:
+            p.id ||
+            `mp-${Date.now().toString(36)}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+          categories: (p.categories || []).map((c) => ({ ...c, used: 0 })),
+        }));
+        return {
+          ...prev,
+          families: {
+            ...prev.families,
+            [fam.id]: { ...fam, manualProviders: normalized },
+          },
+        };
+      });
+      if (!ok) return { ok: false, error: "Family not found." };
+      return { ok: true };
+    },
+    [user, persistSessionMeta]
+  );
+
+  const updatePersonalManualProviders = useCallback(
+    (providers) => {
+      const normalized = (providers || []).map((p, i) => ({
+        ...p,
+        id: p.id || `mp-${Date.now().toString(36)}-${i}`,
+        categories: (p.categories || []).map((c) => ({ ...c, used: 0 })),
+      }));
+      updateUser({ manualBenefitProviders: normalized });
+      return { ok: true };
+    },
+    [updateUser]
+  );
+
+  const completeOnboardingOverlay = useCallback(async () => {
+    if (USE_FIREBASE && firebaseUid) {
+      const db = getFirestoreDb();
+      if (db) {
+        await updateDoc(doc(db, "users", firebaseUid), {
+          onboardingComplete: true,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } else {
+      localStorage.setItem(ONBOARDING_KEY, "true");
+    }
     setShowOnboardingOverlay(false);
-  };
+  }, [firebaseUid]);
 
   const dismissOnboardingOverlay = () => {
     setShowOnboardingOverlay(false);
   };
 
-  const logout = () => {
+  const logout = useCallback(async () => {
+    if (USE_FIREBASE) {
+      try {
+        const auth = getFirebaseAuth();
+        if (auth) await signOut(auth);
+      } catch (e) {
+        console.warn("NexaCare: sign out", e);
+      }
+    }
     setUser(null);
+    setFirebaseUid(null);
     setShowOnboardingOverlay(false);
-    localStorage.removeItem(USER_KEY);
-  };
+    if (!USE_FIREBASE) {
+      localStorage.removeItem(USER_KEY);
+    }
+  }, []);
 
-  const updateProfile = (updates) => {
-    setHealthProfile((prev) => {
-      const next = normalizeProfile({ ...prev, ...updates });
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
-      return next;
-    });
-  };
+  const updateProfile = useCallback(
+    (updates) => {
+      setHealthProfile((prev) => {
+        const next = normalizeProfile({ ...prev, ...updates });
+        if (!USE_FIREBASE) {
+          localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+        } else if (firebaseUid) {
+          void saveUserDocument(firebaseUid, { healthProfile: next }).catch((e) => {
+            console.warn("NexaCare: failed to save health profile", e);
+          });
+        }
+        return next;
+      });
+    },
+    [firebaseUid]
+  );
 
   const value = useMemo(
     () => ({
       user,
+      firebaseUid,
+      authReady,
       healthProfile,
       isAuthenticated: Boolean(user),
       showOnboardingOverlay,
       enterprises,
+      resolvedEnterprises,
       household,
       sessionMeta,
       myEnterprise,
@@ -676,21 +1259,28 @@ export function AuthProvider({ children }) {
       renameEmployeeRole,
       setEmployerPreviewRole,
       updateHousehold,
+      ensureEmployerInviteKeysForMyOrg,
+      updateFamilyManualProviders,
+      updatePersonalManualProviders,
       updateUser,
       createFamilyGroup,
       joinFamilyWithKey,
       ownerSetFamilyMemberRole,
       generateEmployerInviteKey,
       applyEmployerInviteKey,
+      removeWorkPosition,
       dissolveFamily,
       transferFamilyOwnership,
       leaveFamily,
     }),
     [
       user,
+      firebaseUid,
+      authReady,
       healthProfile,
       showOnboardingOverlay,
       enterprises,
+      resolvedEnterprises,
       household,
       sessionMeta,
       myEnterprise,
@@ -699,18 +1289,25 @@ export function AuthProvider({ children }) {
       benefitDashboardSummary,
       benefitContextDescription,
       login,
+      logout,
+      updateProfile,
+      completeOnboardingOverlay,
       updateEnterprise,
       addEmployeeRole,
       updateEmployeeRoleCategories,
       renameEmployeeRole,
       setEmployerPreviewRole,
       updateHousehold,
+      ensureEmployerInviteKeysForMyOrg,
+      updateFamilyManualProviders,
+      updatePersonalManualProviders,
       updateUser,
       createFamilyGroup,
       joinFamilyWithKey,
       ownerSetFamilyMemberRole,
       generateEmployerInviteKey,
       applyEmployerInviteKey,
+      removeWorkPosition,
       dissolveFamily,
       transferFamilyOwnership,
       leaveFamily,

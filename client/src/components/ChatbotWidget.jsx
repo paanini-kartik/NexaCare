@@ -31,10 +31,10 @@ const TOOLS = [
       type: "object",
       required: ["type", "clinicName", "date", "duration"],
       properties: {
-        type:       { type: "string", description: "e.g. Annual Dental Checkup" },
+        type: { type: "string", description: "e.g. Annual Dental Checkup" },
         clinicName: { type: "string", description: "Name of the clinic" },
-        date:       { type: "string", description: "ISO 8601 date string" },
-        duration:   { type: "number", description: "Duration in minutes" },
+        date: { type: "string", description: "ISO 8601 date string" },
+        duration: { type: "number", description: "Duration in minutes" },
       },
     },
   },
@@ -60,7 +60,7 @@ const TOOLS = [
       required: ["benefitType", "amount"],
       properties: {
         benefitType: { type: "string", enum: ["dental", "vision", "physio"] },
-        amount:      { type: "number", description: "Amount in dollars" },
+        amount: { type: "number", description: "Amount in dollars" },
       },
     },
   },
@@ -72,7 +72,7 @@ const TOOLS = [
       required: ["message", "type"],
       properties: {
         message: { type: "string" },
-        type:    { type: "string", enum: ["info", "warning", "success"] },
+        type: { type: "string", enum: ["info", "warning", "success"] },
       },
     },
   },
@@ -109,28 +109,33 @@ export default function ChatbotWidget({
   onShowNotification,
 }) {
   const appointments = propAppointments ?? [
-    { id: "apt_01", type: "Annual Dental Checkup",  clinicName: "Smile Dental Studio",    date: "2026-04-02T10:00:00Z", duration: 60,  status: "upcoming" },
-    { id: "apt_02", type: "Physiotherapy Session",  clinicName: "ActiveCare Physio",       date: "2026-04-10T14:30:00Z", duration: 45,  status: "upcoming" },
-    { id: "apt_04", type: "Vision Test",            clinicName: "ClearView Optometry",     date: "2025-12-15T11:00:00Z", duration: 45,  status: "past"     },
-    { id: "apt_05", type: "Dental Cleaning",        clinicName: "Smile Dental Studio",     date: "2025-10-03T10:00:00Z", duration: 45,  status: "past"     },
+    { id: "apt_01", type: "Annual Dental Checkup", clinicName: "Smile Dental Studio", date: "2026-04-02T10:00:00Z", duration: 60, status: "upcoming" },
+    { id: "apt_02", type: "Physiotherapy Session", clinicName: "ActiveCare Physio", date: "2026-04-10T14:30:00Z", duration: 45, status: "upcoming" },
+    { id: "apt_04", type: "Vision Test", clinicName: "ClearView Optometry", date: "2025-12-15T11:00:00Z", duration: 45, status: "past" },
+    { id: "apt_05", type: "Dental Cleaning", clinicName: "Smile Dental Studio", date: "2025-10-03T10:00:00Z", duration: 45, status: "past" },
   ];
 
-  const [benefits, setBenefits] = useState(propBenefits ?? {
-    dental: { total: 1500, used: 400 },
-    vision: { total: 600,  used: 0   },
-    physio: { total: 900,  used: 200 },
-  });
+  const [benefits, setBenefits] = useState(
+    propBenefits ?? {
+      dental: { total: 1500, used: 400 },
+      vision: { total: 600, used: 0 },
+      physio: { total: 900, used: 200 },
+    }
+  );
 
   const clinics = propClinics ?? [
-    { id: "c_01", name: "Smile Dental Studio",   type: "dental",    lat: 43.6545, lng: -79.3801 },
-    { id: "c_02", name: "ClearView Optometry",   type: "optometry", lat: 43.6510, lng: -79.3850 },
-    { id: "c_03", name: "ActiveCare Physio",     type: "hospital",  lat: 43.6580, lng: -79.3900 },
-    { id: "c_04", name: "Rexall Pharmacy",       type: "pharmacy",  lat: 43.6490, lng: -79.3820 },
-    { id: "c_05", name: "Toronto General Hosp.", type: "hospital",  lat: 43.6590, lng: -79.3870 },
+    { id: "c_01", name: "Smile Dental Studio", type: "dental", lat: 43.6545, lng: -79.3801 },
+    { id: "c_02", name: "ClearView Optometry", type: "optometry", lat: 43.651, lng: -79.385 },
+    { id: "c_03", name: "ActiveCare Physio", type: "hospital", lat: 43.658, lng: -79.39 },
+    { id: "c_04", name: "Rexall Pharmacy", type: "pharmacy", lat: 43.649, lng: -79.382 },
+    { id: "c_05", name: "Toronto General Hosp.", type: "hospital", lat: 43.659, lng: -79.387 },
   ];
 
   const [messages, setMessages] = useState([
-    { from: "bot", text: `Hi Nicolas! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?` },
+    {
+      from: "bot",
+      text: `Hi Nicolas! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
+    },
   ]);
   const [history, setHistory] = useState([]);
   const [input, setInput] = useState("");
@@ -142,7 +147,7 @@ export default function ChatbotWidget({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, open]);
 
-  function executeTool(name, input) {
+  function executeTool(name, toolInput) {
     switch (name) {
       case "get_user_profile":
         return JSON.stringify(MOCK_USER);
@@ -155,16 +160,16 @@ export default function ChatbotWidget({
 
       case "find_clinics":
         return JSON.stringify(
-          input.type ? clinics.filter((c) => c.type === input.type) : clinics
+          toolInput.type ? clinics.filter((c) => c.type === toolInput.type) : clinics
         );
 
       case "book_appointment": {
         const newAppt = {
           id: `apt_${Date.now()}`,
-          type: input.type,
-          clinicName: input.clinicName,
-          date: input.date,
-          duration: input.duration,
+          type: toolInput.type,
+          clinicName: toolInput.clinicName,
+          date: toolInput.date,
+          duration: toolInput.duration,
           status: "upcoming",
         };
         if (onBookAppointment) onBookAppointment(newAppt);
@@ -172,7 +177,7 @@ export default function ChatbotWidget({
       }
 
       case "update_benefit_usage": {
-        const { benefitType, amount } = input;
+        const { benefitType, amount } = toolInput;
         setBenefits((prev) => {
           const updated = {
             ...prev,
@@ -188,10 +193,10 @@ export default function ChatbotWidget({
       }
 
       case "show_notification": {
-        if (onShowNotification) onShowNotification(input.message, input.type);
+        if (onShowNotification) onShowNotification(toolInput.message, toolInput.type);
         setMessages((prev) => [
           ...prev,
-          { from: "bot", text: `✅ ${input.message}`, isNotification: true },
+          { from: "bot", text: `✅ ${toolInput.message}`, isNotification: true },
         ]);
         return JSON.stringify({ success: true });
       }
@@ -201,7 +206,7 @@ export default function ChatbotWidget({
     }
   }
 
-  async function callAPI(messages) {
+  async function callAPI(apiMessages) {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -215,7 +220,7 @@ export default function ChatbotWidget({
         max_tokens: 1024,
         system: buildSystemPrompt(MOCK_USER, benefits, appointments),
         tools: TOOLS,
-        messages,
+        messages: apiMessages,
       }),
     });
     const data = await response.json();
@@ -237,28 +242,22 @@ export default function ChatbotWidget({
     try {
       let data = await callAPI(currentHistory);
 
-      // Agentic tool loop — keep going until Claude gives a text reply
       while (data.stop_reason === "tool_use") {
         const toolUseBlocks = data.content.filter((b) => b.type === "tool_use");
 
-        // Append Claude's tool_use turn to history
         currentHistory = [...currentHistory, { role: "assistant", content: data.content }];
 
-        // Execute each tool and build tool_result blocks
         const toolResults = toolUseBlocks.map((block) => ({
           type: "tool_result",
           tool_use_id: block.id,
           content: executeTool(block.name, block.input),
         }));
 
-        // Append tool results as user turn
         currentHistory = [...currentHistory, { role: "user", content: toolResults }];
 
-        // Call API again
         data = await callAPI(currentHistory);
       }
 
-      // Final text reply
       const reply = data.content.find((b) => b.type === "text")?.text ?? "Done!";
       currentHistory = [...currentHistory, { role: "assistant", content: reply }];
       setHistory(currentHistory);

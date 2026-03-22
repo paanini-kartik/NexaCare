@@ -8,7 +8,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import CheckupDashboardSection from "../components/CheckupDashboardSection";
 import { useAuth } from "../contexts/AuthContext";
-import { healthNews, onboardingSteps, quickActions } from "../data/mockData";
+import { onboardingSteps, quickActions } from "../data/mockData";
 
 const iconMap = {
   calendar: CalendarCheck,
@@ -20,20 +20,35 @@ const iconMap = {
 const actionTones = ["mint", "sky", "amber", "violet"];
 
 function BenefitsSummaryCard() {
-  const { benefitDashboardSummary, benefitContextDescription } = useAuth();
+  const { benefitDashboardSummary, benefitContextDescription, effectiveInsurers } = useAuth();
   const { remaining, avgCoverage } = benefitDashboardSummary;
+  const hasCategories = effectiveInsurers.some((i) => (i.categories || []).length > 0);
 
   return (
     <section className="wallet-card dashboard-benefits-hero" aria-label="Benefits summary">
       <p className="wallet-eyebrow">Total active benefits</p>
-      <h3>${remaining.toLocaleString()}</h3>
-      <div className="wallet-metrics">
-        <span>Average coverage {avgCoverage}%</span>
-        <span>Remaining across plans ${remaining.toLocaleString()}</span>
-      </div>
+      {hasCategories ? (
+        <>
+          <h3>${remaining.toLocaleString()}</h3>
+          <div className="wallet-metrics">
+            <span>Average coverage {avgCoverage}%</span>
+            <span>Remaining across plans ${remaining.toLocaleString()}</span>
+          </div>
+        </>
+      ) : (
+        <>
+          <h3>—</h3>
+          <div className="wallet-metrics">
+            <span>No plan categories yet</span>
+            <span>Add employer keys or manual providers in Settings, or define roles in Employer Hub.</span>
+          </div>
+        </>
+      )}
       {benefitContextDescription ? (
         <p className="wallet-footnote">{benefitContextDescription}</p>
-      ) : null}
+      ) : (
+        <p className="wallet-footnote">Nothing linked until you add benefit sources.</p>
+      )}
     </section>
   );
 }
@@ -115,20 +130,13 @@ function NewsFeed() {
       <h2 id="dash-insights-heading" className="title-vibe">
         Health insights
       </h2>
-      <p className="insights-vibe-lead">Stories, not widgets.</p>
-      <ul className="insight-list insight-list--vibe">
-        {healthNews.map((item, i) => (
-          <li key={item.id} className={`insight-row insight-row--${i === 0 ? "feature" : "std"}`}>
-            <div className="insight-thumb">
-              <img src={item.image} alt="" />
-            </div>
-            <div>
-              <span className="insight-tag">{item.tag}</span>
-              <h4>{item.title}</h4>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <p className="insights-vibe-lead">Your own notes and care context will live here as you use the app.</p>
+      <div className="empty-vibe" aria-live="polite">
+        <div className="empty-vibe-inner">
+          <h3>No feed items</h3>
+          <p>We do not inject sample articles—complete your health profile and benefits to keep everything personal.</p>
+        </div>
+      </div>
     </section>
   );
 }

@@ -48,12 +48,12 @@ const biteCards = [
   {
     icon: Wallet,
     title: "Benefits snapshot",
-    body: "See annual limits, what you’ve used, and remaining headroom across dental, vision, emergency, and more—pulled from demo plan data.",
+    body: "See annual limits, what you’ve used, and remaining headroom across categories you define—employer roles, keys, or manual providers you add in the app.",
   },
   {
     icon: Compass,
     title: "Health compass",
-    body: "Map-based search for hospitals, clinics, pharmacy, and specialists, with flags when sample locations align with your benefits.",
+    body: "Map-based search for hospitals, clinics, pharmacy, and specialists when your backend serves clinic data—aligned with benefit flags from your own plans.",
   },
   {
     icon: Siren,
@@ -104,7 +104,7 @@ const modules = [
   {
     icon: MapPin,
     title: "Compass",
-    body: "Pan and filter sample locations; use it to plan a visit that matches the type of care you need.",
+    body: "Pan and filter live clinic results; use it to plan a visit that matches the type of care you need.",
   },
   {
     icon: ShieldCheck,
@@ -144,7 +144,7 @@ const audiences = [
       "We needed something that looked credible on day one. The employer view plus member dashboard tells the same story up and down the org.",
     attribution: "Marcus T., benefits consultant (design review)",
     metrics: [
-      { value: "2", label: "sample insurers in the demo with multi-category plans" },
+      { value: "2", label: "multi-category plan rows employers configure per job role" },
       { value: "1", label: "shared design language from marketing page to logged-in app" },
     ],
   },
@@ -153,8 +153,8 @@ const audiences = [
 const assurances = [
   {
     icon: Lock,
-    title: "Browser-only demo data",
-    body: "Profiles and preferences save with localStorage in this build—there is no central patient database behind the scenes.",
+    title: "Your data, your account",
+    body: "With Firebase configured, profile and plans sync to your project’s Firestore. Without it, some builds still persist locally in this browser only.",
   },
   {
     icon: Database,
@@ -423,10 +423,10 @@ export default function LandingPage() {
 
         <section className="landing-section landing-section--final" aria-labelledby="landing-final-heading">
           <div className="landing-final-panel landing-surface-sharp">
-            <h2 id="landing-final-heading">Try the full NexaCare demo</h2>
+            <h2 id="landing-final-heading">Try the full NexaCare app</h2>
             <p>
               No payment step—sign up, walk the onboarding overlay once, then explore dashboard rings, profile services,
-              benefits math, and the compass map with sample clinics.
+              benefits you configure, and the compass map when your API is available.
             </p>
             <div className="landing-final-actions">
               <Link className="primary-btn landing-cta-primary landing-btn-sharp" to="/auth">

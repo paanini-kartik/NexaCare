@@ -1,16 +1,24 @@
-import firebase
+"""
+NexaCare Python API — clinics proxy only.
 
-from fastapi import FastAPI
-from routes import users, appointments, clinics, benefits, auth, health
+User profiles, benefits, family/session meta, and auth are handled in the React app
+via Firebase Auth + Firestore (client SDK). This service keeps Google Places / Maps
+API keys off the browser and exposes `/api/clinics`.
+"""
+
 from dotenv import load_dotenv
+from fastapi import FastAPI
+
+from routes import clinics
 
 load_dotenv()
 
-app = FastAPI()
+app = FastAPI(title="NexaCare API", version="1.0.0")
 
-app.include_router(auth.router, prefix="/api/auth")
-app.include_router(users.router, prefix="/api/users")
-app.include_router(appointments.router, prefix="/api/appointments")
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok"}
+
+
 app.include_router(clinics.router, prefix="/api/clinics")
-app.include_router(benefits.router, prefix="/api/benefits")
-app.include_router(health.router, prefix="/api/health")
