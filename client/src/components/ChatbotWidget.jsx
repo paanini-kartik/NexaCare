@@ -5,7 +5,6 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { useNavigate } from "react-router-dom";
-import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { useAuth } from "../contexts/AuthContext";
 
 const TOOLS = [
@@ -1010,19 +1009,19 @@ export default function ChatbotWidget({
   async function extractPdfText(file) {
     try {
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+      // v5 requires the worker URL to match the exact installed version
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
       const buffer = await file.arrayBuffer();
-      const typedArray = new Uint8Array(buffer);
-      const loadingTask = pdfjsLib.getDocument({ data: typedArray });
-      const pdf = await loadingTask.promise;
-      const pages = await Promise.all(
+      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+      const pageTexts = await Promise.all(
         Array.from({ length: pdf.numPages }, (_, i) =>
-          pdf.getPage(i + 1).then((p) => p.getTextContent()).then((tc) =>
-            tc.items.map((it) => it.str).join(" ")
-          )
+          pdf.getPage(i + 1)
+            .then((p) => p.getTextContent())
+            .then((tc) => tc.items.map((it) => it.str).join(" "))
         )
       );
-      return pages.join("\n");
+      return pageTexts.join("\n\n");
     } catch (err) {
       console.error("PDF extraction failed:", err);
       throw new Error("Could not read the PDF. Make sure it's a valid, non-scanned PDF.");
