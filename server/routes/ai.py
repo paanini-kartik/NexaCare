@@ -18,7 +18,7 @@ router = APIRouter()
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = "claude-3-5-haiku-20241022"
 
 
 def _get_key() -> str:
