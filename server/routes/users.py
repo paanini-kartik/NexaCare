@@ -12,5 +12,7 @@ def get_user(user_id: str):
         user = doc.to_dict()
         user["id"] = user_id
         return user
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

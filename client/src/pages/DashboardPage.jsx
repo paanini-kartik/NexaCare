@@ -508,7 +508,7 @@ export default function DashboardPage() {
     : "No upcoming appointments on file.";
 
   const memberExtraActions = [
-    { id: "upload", label: "Upload Insurance PDF", IconComponent: Paperclip, onClick: () => {} },
+    { id: "upload", label: "Upload Insurance PDF", IconComponent: Paperclip, route: "/settings" },
     { id: "compass", label: "Find Nearby Clinic",  IconComponent: MapPin,    route: "/health-compass" },
   ];
 

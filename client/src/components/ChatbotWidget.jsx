@@ -741,7 +741,7 @@ export default function ChatbotWidget({
         const typeParam = toolInput.type ?? "all";
         try {
           const res = await apiFetch(
-            `/api/clinics?lat=${userLat}&lng=${userLng}&type=${typeParam}`
+            `/api/clinics/?lat=${userLat}&lng=${userLng}&type=${typeParam}`
           );
           const data = await res.json();
           return JSON.stringify(Array.isArray(data) ? data : clinics);
@@ -805,11 +805,12 @@ export default function ChatbotWidget({
       case "update_benefit_usage": {
         const { benefitType, amount } = toolInput;
         setBenefits((prev) => {
+          if (!prev || !prev[benefitType]) return prev;
           const updated = {
             ...prev,
             [benefitType]: {
               ...prev[benefitType],
-              used: Math.min(prev[benefitType].used + amount, prev[benefitType].total),
+              used: Math.min((prev[benefitType].used ?? 0) + amount, prev[benefitType].total ?? 0),
             },
           };
           if (onUpdateBenefit) onUpdateBenefit(benefitType, amount);
@@ -887,9 +888,9 @@ export default function ChatbotWidget({
 
       case "set_checkup_date": {
         const { type, date } = toolInput;
-        const existing = healthProfile?.coreCheckups ?? {};
-        const updated = { ...existing, [type]: { ...existing[type], lastVisit: date } };
-        updateProfile({ coreCheckups: updated });
+        const existing = healthProfile?.checkupSchedule ?? {};
+        const updated = { ...existing, [type]: { ...existing[type], lastVisitISO: date } };
+        updateProfile({ checkupSchedule: updated });
         return JSON.stringify({ success: true, type, date });
       }
 
