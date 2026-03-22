@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -7,12 +6,27 @@ function currency(amount) {
 }
 
 export default function BenefitsPage() {
-  const { user, enterprises, effectiveInsurers, benefitContextDescription } = useAuth();
+  const { effectiveInsurers, benefitContextDescription } = useAuth();
 
-  const workEmployerName = useMemo(() => {
-    if (!user?.enterpriseId || !user?.employeeRoleTemplateId) return null;
-    return enterprises.find((e) => e.id === user.enterpriseId)?.name ?? null;
-  }, [user?.enterpriseId, user?.employeeRoleTemplateId, enterprises]);
+  if (!effectiveInsurers.length) {
+    return (
+      <div className="page-flow">
+        <header className="page-hero page-hero--alive">
+          <h1>Benefits</h1>
+          <p>
+            No benefit plans are linked yet. Add an <strong>employer invite key</strong>, set up your organization in{" "}
+            <Link to="/employer">Employer Hub</Link>, or add <strong>manual providers</strong> in{" "}
+            <Link to="/settings">Settings</Link>. Everything you see here will come from what you configure.
+          </p>
+        </header>
+        <section className="contained" style={{ marginTop: "1.5rem" }}>
+          <p className="page-section-lead">
+            When at least one schedule exists, category totals and per-provider blocks will appear on this page.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   const allCategories = effectiveInsurers.flatMap((insurer) =>
     insurer.categories.map((c) => ({ ...c, provider: insurer.provider, plan: insurer.plan }))
@@ -24,7 +38,7 @@ export default function BenefitsPage() {
         acc[item.name] = { name: item.name, limit: 0, used: 0, weightedCoverage: 0, count: 0 };
       }
       acc[item.name].limit += item.annualLimit;
-      acc[item.name].used += item.used;
+      acc[item.name].used += item.used || 0;
       acc[item.name].weightedCoverage += item.coverage;
       acc[item.name].count += 1;
       return acc;
@@ -40,43 +54,22 @@ export default function BenefitsPage() {
       <header className="page-hero page-hero--alive">
         <h1>Benefits</h1>
         <p>
-          Your plans, rolled into one readable view. The table below is intentionally contained—numbers need a grid.
+          Your plans in one view. Schedules start at <strong>$0 used</strong>; work benefits fill in when you apply an
+          employer key, and you can add benefit providers in{" "}
+          <Link to="/settings">Settings</Link> (family owners and contributors share one provider list for the whole family).
           {benefitContextDescription ? (
             <>
               {" "}
-              <strong>Active source:</strong> {benefitContextDescription}.
+              <strong>Active sources:</strong> {benefitContextDescription}.
             </>
-          ) : null}{" "}
-          Benefit schedules come from <strong>employer keys</strong> and family context—configure keys in{" "}
-          <Link to="/settings">Settings</Link>.
+          ) : null}
         </p>
       </header>
-
-      {user?.accountType !== "employer" ? (
-        <section className="contained">
-          <h2 className="page-section-title">Roles &amp; connections</h2>
-          <p className="page-section-lead">
-            Family role: <strong>{user?.familyRole || "—"}</strong>
-            {workEmployerName ? (
-              <>
-                {" "}
-                · Work benefits: <strong>{workEmployerName}</strong>
-              </>
-            ) : (
-              <>
-                {" "}
-                · Work benefits: <em>not linked</em>
-              </>
-            )}
-            . Use <Link to="/settings">Settings</Link> for family keys and employer keys.
-          </p>
-        </section>
-      ) : null}
 
       <section className="page-section">
         <h2 className="title-vibe">Synthesized across carriers</h2>
         <p className="page-section-lead">
-          Dummy data stands in for multiple insurers; the same layout works when you wire real APIs.
+          Category rows aggregate every active provider. Usage stays at $0 until you track spend elsewhere.
         </p>
         <div className="contained">
           <div className="table-wrap">
@@ -118,12 +111,12 @@ export default function BenefitsPage() {
                 <strong>{insurer.provider}</strong>
                 <span>{insurer.plan}</span>
               </header>
-              {insurer.categories.map((category) => {
-                const remaining = category.annualLimit - category.used;
+              {insurer.categories.map((category, cidx) => {
+                const remaining = category.annualLimit - (category.used || 0);
                 const denom = category.annualLimit || 1;
                 const pct = Math.max(0, Math.min(100, Math.round((remaining / denom) * 100)));
                 return (
-                  <div key={category.name} className="benefit-row">
+                  <div key={`${insurer.id}-${cidx}`} className="benefit-row">
                     <div className="benefit-top">
                       <span>{category.name}</span>
                       <span>{Math.round(category.coverage * 100)}% coverage</span>

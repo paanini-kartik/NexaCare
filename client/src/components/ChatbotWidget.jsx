@@ -35,10 +35,10 @@ const TOOLS = [
       type: "object",
       required: ["type", "clinicName", "date", "duration"],
       properties: {
-        type:       { type: "string", description: "e.g. Annual Dental Checkup" },
+        type: { type: "string", description: "e.g. Annual Dental Checkup" },
         clinicName: { type: "string", description: "Name of the clinic" },
-        date:       { type: "string", description: "ISO 8601 date string" },
-        duration:   { type: "number", description: "Duration in minutes" },
+        date: { type: "string", description: "ISO 8601 date string" },
+        duration: { type: "number", description: "Duration in minutes" },
       },
     },
   },
@@ -64,7 +64,7 @@ const TOOLS = [
       required: ["benefitType", "amount"],
       properties: {
         benefitType: { type: "string", enum: ["dental", "vision", "physio"] },
-        amount:      { type: "number", description: "Amount in dollars" },
+        amount: { type: "number", description: "Amount in dollars" },
       },
     },
   },
@@ -76,7 +76,7 @@ const TOOLS = [
       required: ["message", "type"],
       properties: {
         message: { type: "string" },
-        type:    { type: "string", enum: ["info", "warning", "success"] },
+        type: { type: "string", enum: ["info", "warning", "success"] },
       },
     },
   },
@@ -196,22 +196,27 @@ export default function ChatbotWidget({
     { id: "apt_05", type: "Dental Cleaning",        clinicName: "Smile Dental Studio",     date: "2025-10-03T10:00:00Z", duration: 45,  status: "past"     },
   ];
 
-  const [benefits, setBenefits] = useState(propBenefits ?? {
-    dental: { total: 1500, used: 400 },
-    vision: { total: 600,  used: 0   },
-    physio: { total: 900,  used: 200 },
-  });
+  const [benefits, setBenefits] = useState(
+    propBenefits ?? {
+      dental: { total: 1500, used: 400 },
+      vision: { total: 600, used: 0 },
+      physio: { total: 900, used: 200 },
+    }
+  );
 
   const clinics = propClinics ?? [
-    { id: "c_01", name: "Smile Dental Studio",   type: "dental",    lat: 43.6545, lng: -79.3801 },
-    { id: "c_02", name: "ClearView Optometry",   type: "optometry", lat: 43.6510, lng: -79.3850 },
-    { id: "c_03", name: "ActiveCare Physio",     type: "hospital",  lat: 43.6580, lng: -79.3900 },
-    { id: "c_04", name: "Rexall Pharmacy",       type: "pharmacy",  lat: 43.6490, lng: -79.3820 },
-    { id: "c_05", name: "Toronto General Hosp.", type: "hospital",  lat: 43.6590, lng: -79.3870 },
+    { id: "c_01", name: "Smile Dental Studio", type: "dental", lat: 43.6545, lng: -79.3801 },
+    { id: "c_02", name: "ClearView Optometry", type: "optometry", lat: 43.651, lng: -79.385 },
+    { id: "c_03", name: "ActiveCare Physio", type: "hospital", lat: 43.658, lng: -79.39 },
+    { id: "c_04", name: "Rexall Pharmacy", type: "pharmacy", lat: 43.649, lng: -79.382 },
+    { id: "c_05", name: "Toronto General Hosp.", type: "hospital", lat: 43.659, lng: -79.387 },
   ];
 
   const [messages, setMessages] = useState([
-    { from: "bot", text: "Hi Nicolas! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?" },
+    {
+      from: "bot",
+      text: `Hi Nicolas! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
+    },
   ]);
   const [history,  setHistory]  = useState([]);
   const [input,    setInput]    = useState("");
@@ -283,7 +288,7 @@ export default function ChatbotWidget({
     }
   }
 
-  async function callAPI(msgs) {
+  async function callAPI(apiMessages) {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -297,7 +302,7 @@ export default function ChatbotWidget({
         max_tokens: 1024,
         system: buildSystemPrompt(MOCK_USER, benefits, appointments),
         tools: TOOLS,
-        messages: msgs,
+        messages: apiMessages,
       }),
     });
     const data = await response.json();
@@ -318,13 +323,17 @@ export default function ChatbotWidget({
 
       while (data.stop_reason === "tool_use") {
         const toolUseBlocks = data.content.filter((b) => b.type === "tool_use");
+
         currentHistory = [...currentHistory, { role: "assistant", content: data.content }];
+
         const toolResults = toolUseBlocks.map((block) => ({
           type: "tool_result",
           tool_use_id: block.id,
           content: executeTool(block.name, block.input),
         }));
+
         currentHistory = [...currentHistory, { role: "user", content: toolResults }];
+
         data = await callAPI(currentHistory);
       }
 

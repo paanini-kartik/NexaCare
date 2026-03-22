@@ -1,4 +1,4 @@
-/** Short random segment for mock invite keys */
+/** Short random segment for invite / join keys */
 export function randomSegment(len = 5) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let s = "";

@@ -1,10 +1,111 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { createDefaultManualProvider } from "../lib/manualBenefitDefaults";
 
 function normEmail(email) {
   return String(email || "")
     .trim()
     .toLowerCase();
+}
+
+function roleLabelForKey(roleTemplateId, enterprise) {
+  const r = enterprise?.employeeRoles?.find((x) => x.id === roleTemplateId);
+  return r?.name || roleTemplateId;
+}
+
+function describeWorkPosition(wa, enterprisesList) {
+  const ent = enterprisesList.find((e) => e.id === wa.enterpriseId);
+  const role = ent?.employeeRoles?.find((r) => r.id === wa.roleTemplateId);
+  return {
+    orgName: ent?.name || wa.enterpriseId,
+    roleName: role?.name || wa.roleTemplateId,
+  };
+}
+
+/** Editable category rows for a manual benefit provider (name, coverage, limit, add/remove). */
+function EditableManualCategories({ categories, onApply }) {
+  const rows = Array.isArray(categories) ? categories : [];
+  const commit = (next) => onApply(next.map((c) => ({ ...c, used: 0 })));
+
+  return (
+    <div>
+      {rows.length === 0 ? (
+        <p className="page-section-lead" style={{ marginTop: "0.5rem" }}>
+          No categories yet—add one for each line of coverage.
+        </p>
+      ) : null}
+      <div className="table-wrap" style={{ marginTop: "0.5rem" }}>
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Coverage (0–1)</th>
+              <th>Annual limit</th>
+              <th aria-label="Remove category" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c, idx) => (
+              <tr key={`mcat-${idx}`}>
+                <td>
+                  <input
+                    className="table-input"
+                    value={c.name}
+                    onChange={(e) => {
+                      const next = rows.map((row, i) => (i === idx ? { ...row, name: e.target.value } : row));
+                      commit(next);
+                    }}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="table-input"
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="1"
+                    value={c.coverage}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      const next = rows.map((row, i) => (i === idx ? { ...row, coverage: v, used: 0 } : row));
+                      commit(next);
+                    }}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="table-input"
+                    type="number"
+                    min="0"
+                    value={c.annualLimit}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      const next = rows.map((row, i) => (i === idx ? { ...row, annualLimit: v, used: 0 } : row));
+                      commit(next);
+                    }}
+                  />
+                </td>
+                <td>
+                  <button type="button" className="secondary-btn" onClick={() => commit(rows.filter((_, i) => i !== idx))}>
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="button-row" style={{ marginTop: "0.5rem" }}>
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={() => commit([...rows, { name: "New category", coverage: 0, annualLimit: 0, used: 0 }])}
+        >
+          Add category
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function SettingsPage() {
@@ -17,8 +118,11 @@ export default function SettingsPage() {
     createFamilyGroup,
     joinFamilyWithKey,
     ownerSetFamilyMemberRole,
-    generateEmployerInviteKey,
     applyEmployerInviteKey,
+    removeWorkPosition,
+    resolvedEnterprises,
+    updateFamilyManualProviders,
+    updatePersonalManualProviders,
     dissolveFamily,
     transferFamilyOwnership,
     leaveFamily,
@@ -50,23 +154,20 @@ export default function SettingsPage() {
 
   const [employerKeyInput, setEmployerKeyInput] = useState("");
   const [employerKeyMsg, setEmployerKeyMsg] = useState("");
-  const [newEmployerRoleId, setNewEmployerRoleId] = useState("");
+  const [newManualProvider, setNewManualProvider] = useState("");
+  const [newManualPlan, setNewManualPlan] = useState("");
 
   useEffect(() => {
     if (!user) return;
     setDisplayName(user.fullName || "");
   }, [user]);
 
-  useEffect(() => {
-    if (myEnterprise?.employeeRoles?.length && !newEmployerRoleId) {
-      setNewEmployerRoleId(myEnterprise.employeeRoles[0].id);
-    }
-  }, [myEnterprise, newEmployerRoleId]);
-
   const isEmployer = user?.accountType === "employer";
   const isMember = user?.accountType === "member";
   const isOwner = user?.familyRole === "owner";
+  const isContributor = user?.familyRole === "contributor";
   const isDependent = user?.familyRole === "dependent";
+  const canEditFamilyManualProviders = isOwner || isContributor;
   const workLocked = Boolean(user?.employerAssignmentLocked);
 
   const transferCandidates = useMemo(() => {
@@ -103,10 +204,10 @@ export default function SettingsPage() {
     }
   };
 
-  const onJoinFamily = (e) => {
+  const onJoinFamily = async (e) => {
     e.preventDefault();
     setFamilyMsg("");
-    const res = joinFamilyWithKey(familyJoinInput, familyJoinRole);
+    const res = await joinFamilyWithKey(familyJoinInput, familyJoinRole);
     setFamilyMsg(res.ok ? "Joined family." : res.error || "Could not join");
   };
 
@@ -130,19 +231,12 @@ export default function SettingsPage() {
     setFamilyMsg(res.ok ? "You left the family." : res.error || "Could not leave");
   };
 
-  const onApplyEmployerKey = (e) => {
+  const onApplyEmployerKey = async (e) => {
     e.preventDefault();
     setEmployerKeyMsg("");
-    const res = applyEmployerInviteKey(employerKeyInput);
+    const res = await applyEmployerInviteKey(employerKeyInput);
     setEmployerKeyMsg(res.ok ? "Employer assignment applied — your work role is locked." : res.error || "Invalid key");
     if (res.ok) setEmployerKeyInput("");
-  };
-
-  const onGenerateEmployerKey = (e) => {
-    e.preventDefault();
-    if (!newEmployerRoleId) return;
-    const key = generateEmployerInviteKey(newEmployerRoleId);
-    setEmployerKeyMsg(key ? `New key: ${key} (Connections tab unlocked)` : "Could not generate");
   };
 
   const employerKeysForOrg = useMemo(
@@ -155,9 +249,9 @@ export default function SettingsPage() {
       <header className="page-hero page-hero--alive">
         <h1>Settings</h1>
         <p>
-          Profile first, then access and roles. Work and household benefit schedules are <strong>not edited here</strong>—they
-          follow <strong>employer keys</strong> (and, for family owners, automatically mirror your assignment for the rest of
-          the family). The <strong>Connections</strong> tab appears only after you generate a key.
+          Profile first, then access and roles. Employer invite keys are created automatically for each job role; copy them
+          under <strong>Connections</strong>. Family owners and contributors share one benefit-provider list that applies to
+          everyone in the family.
         </p>
       </header>
 
@@ -201,27 +295,24 @@ export default function SettingsPage() {
           {isEmployer ? (
             <>
               <p className="page-section-lead">
-                Generate an <strong>employer invite key</strong> tied to a benefit role. When someone enters it, their work
-                role and benefits update and <strong>lock</strong> so they cannot override what you assigned.
+                Each <strong>job role</strong> gets an invite key automatically when the role is created (existing roles are
+                backfilled when you open Employer Hub). When someone enters a key, their work benefits match that role and{" "}
+                <strong>lock</strong>. Copy keys under <strong>Connections</strong>.
               </p>
-              <form className="settings-form" onSubmit={onGenerateEmployerKey}>
-                <label className="form-field">
-                  Role for this key
-                  <select value={newEmployerRoleId} onChange={(e) => setNewEmployerRoleId(e.target.value)}>
-                    {myEnterprise?.employeeRoles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="button-row">
-                  <button className="primary-btn" type="submit">
-                    Generate employer key
-                  </button>
-                </div>
-              </form>
-              {employerKeyMsg ? <p className="auth-hint">{employerKeyMsg}</p> : null}
+              {employerKeysForOrg.length ? (
+                <ul className="settings-key-items" style={{ marginTop: "0.75rem" }}>
+                  {employerKeysForOrg.map((k) => (
+                    <li key={k.key}>
+                      <code>{k.key}</code>
+                      <span className="settings-key-meta">
+                        {roleLabelForKey(k.roleTemplateId, myEnterprise)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="page-section-lead">Open <strong>Employer Hub</strong> once to create keys for your roles.</p>
+              )}
               <p className="page-section-lead" style={{ marginTop: "1.25rem" }}>
                 Manage rate tables in <strong>Employer Hub</strong>.
               </p>
@@ -276,7 +367,7 @@ export default function SettingsPage() {
                 <div className="settings-family-board contained">
                   <h4 className="settings-mini-title">Family board</h4>
                   <p className="page-section-lead">
-                    Family ID: <code>{currentFamily.id}</code> · Your role: <strong>{user.familyRole}</strong>
+                    Family ID: <code>{currentFamily.id}</code>
                     {isOwner ? (
                       <>
                         {" "}
@@ -288,7 +379,6 @@ export default function SettingsPage() {
                     {currentFamily.members.map((m) => (
                       <li key={m.email}>
                         <span>{m.email}</span>
-                        <span className="settings-member-role">{m.familyRole}</span>
                         {isOwner && m.familyRole !== "owner" && normEmail(m.email) !== normEmail(user.email) ? (
                           <select
                             className="settings-role-select"
@@ -330,7 +420,7 @@ export default function SettingsPage() {
                           >
                             {transferCandidates.map((m) => (
                               <option key={m.email} value={m.email}>
-                                {m.email} ({m.familyRole})
+                                {m.email}
                               </option>
                             ))}
                           </select>
@@ -358,9 +448,232 @@ export default function SettingsPage() {
                 </div>
               ) : null}
 
+              {isMember && user.familyId ? (
+                <>
+                  <h3 className="settings-subhead">Benefit providers (family)</h3>
+                  <p className="page-section-lead">
+                    Everyone in this family sees the same providers—<strong>owners and contributors</strong> can add or edit
+                    them. Usage starts at <strong>$0</strong>. Employer plans from work keys still merge in automatically.
+                  </p>
+                  {canEditFamilyManualProviders ? (
+                    <div className="contained settings-nested" style={{ marginTop: "0.5rem" }}>
+                      <div className="form-grid form-grid--inline" style={{ marginBottom: "1rem" }}>
+                        <label className="form-field">
+                          Provider name
+                          <input
+                            value={newManualProvider}
+                            onChange={(e) => setNewManualProvider(e.target.value)}
+                            placeholder="e.g. Regional Health Co-op"
+                          />
+                        </label>
+                        <label className="form-field">
+                          Plan name
+                          <input
+                            value={newManualPlan}
+                            onChange={(e) => setNewManualPlan(e.target.value)}
+                            placeholder="e.g. Bronze"
+                          />
+                        </label>
+                        <div className="button-row" style={{ alignSelf: "end" }}>
+                          <button
+                            className="primary-btn"
+                            type="button"
+                            onClick={() => {
+                              const list = currentFamily?.manualProviders || [];
+                              const row = createDefaultManualProvider(newManualProvider, newManualPlan);
+                              const r = updateFamilyManualProviders([...list, row]);
+                              if (!r.ok) setFamilyMsg(r.error || "");
+                              else {
+                                setNewManualProvider("");
+                                setNewManualPlan("");
+                              }
+                            }}
+                          >
+                            Add provider
+                          </button>
+                        </div>
+                      </div>
+                      {(currentFamily?.manualProviders || []).map((p) => (
+                        <div key={p.id} className="settings-family-board" style={{ marginBottom: "1rem" }}>
+                          <div className="employer-role-head" style={{ alignItems: "center" }}>
+                            <strong>
+                              {p.provider} — {p.plan}
+                            </strong>
+                            <button
+                              className="secondary-btn"
+                              type="button"
+                              onClick={() => {
+                                const list = currentFamily?.manualProviders || [];
+                                const r = updateFamilyManualProviders(list.filter((x) => x.id !== p.id));
+                                if (!r.ok) setFamilyMsg(r.error || "");
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <EditableManualCategories
+                            categories={p.categories}
+                            onApply={(next) => {
+                              const list = currentFamily?.manualProviders || [];
+                              const merged = list.map((pp) =>
+                                pp.id !== p.id ? pp : { ...pp, categories: next }
+                              );
+                              const r = updateFamilyManualProviders(merged);
+                              if (!r.ok) setFamilyMsg(r.error || "");
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="contained settings-nested">
+                      {(currentFamily?.manualProviders || []).length ? (
+                        <ul className="checklist-open">
+                          {(currentFamily.manualProviders || []).map((p) => (
+                            <li key={p.id}>
+                              <strong>
+                                {p.provider} — {p.plan}
+                              </strong>
+                              <ul>
+                                {(p.categories || []).map((c, ci) => (
+                                  <li key={`${p.id}-c-${ci}`}>
+                                    {c.name}: {Math.round((c.coverage || 0) * 100)}% · $
+                                    {(c.annualLimit || 0).toLocaleString()} limit
+                                  </li>
+                                ))}
+                              </ul>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="page-section-lead">
+                          No extra providers yet—ask your family owner or a contributor to add them in Settings.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : null}
+
+              {isMember && !user.familyId && !workLocked ? (
+                <>
+                  <h3 className="settings-subhead">Benefit providers (personal)</h3>
+                  <p className="page-section-lead">
+                    Use this when you are <strong>not</strong> on an employer-linked work plan. Everything starts at $0
+                    used.
+                  </p>
+                  <div className="contained settings-nested" style={{ marginTop: "0.5rem" }}>
+                    <div className="form-grid form-grid--inline" style={{ marginBottom: "1rem" }}>
+                      <label className="form-field">
+                        Provider name
+                        <input
+                          value={newManualProvider}
+                          onChange={(e) => setNewManualProvider(e.target.value)}
+                          placeholder="e.g. Individual plan"
+                        />
+                      </label>
+                      <label className="form-field">
+                        Plan name
+                        <input
+                          value={newManualPlan}
+                          onChange={(e) => setNewManualPlan(e.target.value)}
+                          placeholder="e.g. Basic"
+                        />
+                      </label>
+                      <div className="button-row" style={{ alignSelf: "end" }}>
+                        <button
+                          className="primary-btn"
+                          type="button"
+                          onClick={() => {
+                            const list = user?.manualBenefitProviders || [];
+                            const row = createDefaultManualProvider(newManualProvider, newManualPlan);
+                            updatePersonalManualProviders([...list, row]);
+                            setNewManualProvider("");
+                            setNewManualPlan("");
+                          }}
+                        >
+                          Add provider
+                        </button>
+                      </div>
+                    </div>
+                    {(user?.manualBenefitProviders || []).map((p) => (
+                      <div key={p.id} className="settings-family-board" style={{ marginBottom: "1rem" }}>
+                        <div className="employer-role-head" style={{ alignItems: "center" }}>
+                          <strong>
+                            {p.provider} — {p.plan}
+                          </strong>
+                          <button
+                            className="secondary-btn"
+                            type="button"
+                            onClick={() => {
+                              const list = user?.manualBenefitProviders || [];
+                              updatePersonalManualProviders(list.filter((x) => x.id !== p.id));
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <EditableManualCategories
+                          categories={p.categories}
+                          onApply={(next) => {
+                            const list = user?.manualBenefitProviders || [];
+                            updatePersonalManualProviders(
+                              list.map((pp) => (pp.id !== p.id ? pp : { ...pp, categories: next }))
+                            );
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+
+              {!isDependent ? (
+                <>
+                  <h3 className="settings-subhead">Work positions</h3>
+                  <p className="page-section-lead">
+                    Employer invite keys you apply show up here. You can hold multiple positions; benefits combine every
+                    active plan. Removing a position unlinks that employer—your household schedule (if you are the family
+                    owner) follows your <strong>primary</strong> position (the first one listed).
+                  </p>
+                  {(user?.workAssignments || []).length ? (
+                    <ul className="settings-key-items" style={{ marginTop: "0.5rem" }}>
+                      {(user.workAssignments || []).map((wa) => {
+                        const { orgName, roleName } = describeWorkPosition(wa, resolvedEnterprises);
+                        return (
+                          <li key={wa.id} className="settings-work-position-row">
+                            <div>
+                              <strong>{orgName}</strong>
+                              <span className="settings-key-meta" style={{ display: "block", marginTop: "0.2rem" }}>
+                                {roleName}
+                                {wa.locked ? " · Key-linked" : ""}
+                              </span>
+                            </div>
+                            <button
+                              className="secondary-btn"
+                              type="button"
+                              onClick={() => {
+                                if (!window.confirm(`Remove work position at ${orgName} (${roleName})?`)) return;
+                                const r = removeWorkPosition(wa.id);
+                                if (!r.ok) setEmployerKeyMsg(r.error || "Could not remove");
+                                else setEmployerKeyMsg("Work position removed.");
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="page-section-lead">You have no linked work positions yet.</p>
+                  )}
+                </>
+              ) : null}
+
               <h3 className="settings-subhead">Employer key</h3>
               <p className="page-section-lead">
-                Apply an <strong>EMP-…</strong> key from your employer to set your work benefits (locked afterward).{" "}
+                Apply an <strong>EMP-…</strong> key to add a work position (you can link more than one).{" "}
                 {isOwner ? (
                   <>
                     As <strong>family owner</strong>, that same assignment automatically drives the <strong>household</strong>{" "}
@@ -384,18 +697,18 @@ export default function SettingsPage() {
                     value={employerKeyInput}
                     onChange={(e) => setEmployerKeyInput(e.target.value)}
                     placeholder="EMP-XXXXX"
-                    disabled={workLocked || isDependent}
+                    disabled={isDependent}
                   />
                 </label>
                 <div className="button-row">
-                  <button className="primary-btn" type="submit" disabled={workLocked || isDependent}>
+                  <button className="primary-btn" type="submit" disabled={isDependent}>
                     Apply employer key
                   </button>
                 </div>
               </form>
               {employerKeyMsg ? <p className="auth-hint">{employerKeyMsg}</p> : null}
               {workLocked ? (
-                <p className="page-section-lead">Work assignment is locked by your employer key.</p>
+                <p className="page-section-lead">At least one position is key-linked; remove it above if you need to disconnect.</p>
               ) : null}
             </>
           ) : null}
@@ -405,7 +718,7 @@ export default function SettingsPage() {
       {tab === "connections" && showConnectionsTab ? (
         <section className="contained settings-section">
           <h2 className="page-section-title">Connections</h2>
-          <p className="page-section-lead">Keys you have generated. Share these securely—this is a mock environment.</p>
+          <p className="page-section-lead">Keys you have generated. Share these securely with intended recipients only.</p>
 
           {isEmployer ? (
             <div className="settings-key-list">
@@ -415,9 +728,7 @@ export default function SettingsPage() {
                   {employerKeysForOrg.map((k) => (
                     <li key={k.key}>
                       <code>{k.key}</code>
-                      <span className="settings-key-meta">
-                        Role ID: {k.roleTemplateId} · org: {k.orgId}
-                      </span>
+                      <span className="settings-key-meta">{roleLabelForKey(k.roleTemplateId, myEnterprise)}</span>
                     </li>
                   ))}
                 </ul>
