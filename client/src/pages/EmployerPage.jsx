@@ -1,68 +1,92 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 function CategoryEditor({ categories, onChange }) {
+  const rows = Array.isArray(categories) ? categories : [];
+  const patch = (next) => onChange(next);
+
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Category</th>
-            <th>Coverage (0–1)</th>
-            <th>Annual limit</th>
-            <th>Used</th>
-          </tr>
-        </thead>
-        <tbody>
-          {categories.map((row, idx) => (
-            <tr key={row.name}>
-              <td>{row.name}</td>
-              <td>
-                <input
-                  className="table-input"
-                  type="number"
-                  step="0.05"
-                  min="0"
-                  max="1"
-                  value={row.coverage}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    const next = categories.map((c, i) => (i === idx ? { ...c, coverage: v } : c));
-                    onChange(next);
-                  }}
-                />
-              </td>
-              <td>
-                <input
-                  className="table-input"
-                  type="number"
-                  min="0"
-                  value={row.annualLimit}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    const next = categories.map((c, i) => (i === idx ? { ...c, annualLimit: v } : c));
-                    onChange(next);
-                  }}
-                />
-              </td>
-              <td>
-                <input
-                  className="table-input"
-                  type="number"
-                  min="0"
-                  value={row.used}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    const next = categories.map((c, i) => (i === idx ? { ...c, used: v } : c));
-                    onChange(next);
-                  }}
-                />
-              </td>
+    <div>
+      {rows.length === 0 ? (
+        <p className="page-section-lead">No benefit categories yet—add a row for each line of coverage.</p>
+      ) : null}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Coverage (0–1)</th>
+              <th>Annual limit</th>
+              <th aria-label="Remove category" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={`cat-${idx}`}>
+                <td>
+                  <input
+                    className="table-input"
+                    value={row.name}
+                    onChange={(e) => {
+                      const next = rows.map((c, i) => (i === idx ? { ...c, name: e.target.value } : c));
+                      patch(next);
+                    }}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="table-input"
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="1"
+                    value={row.coverage}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      const next = rows.map((c, i) => (i === idx ? { ...c, coverage: v, used: 0 } : c));
+                      patch(next);
+                    }}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="table-input"
+                    type="number"
+                    min="0"
+                    value={row.annualLimit}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      const next = rows.map((c, i) => (i === idx ? { ...c, annualLimit: v, used: 0 } : c));
+                      patch(next);
+                    }}
+                  />
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => patch(rows.filter((_, i) => i !== idx))}
+                  >
+                    Remove
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="button-row" style={{ marginTop: "0.75rem" }}>
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={() =>
+            patch([...rows, { name: "New category", coverage: 0, annualLimit: 0, used: 0 }])
+          }
+        >
+          Add category
+        </button>
+      </div>
     </div>
   );
 }
@@ -76,6 +100,7 @@ export default function EmployerPage() {
     addEmployeeRole,
     renameEmployeeRole,
     setEmployerPreviewRole,
+    ensureEmployerInviteKeysForMyOrg,
   } = useAuth();
 
   const [tab, setTab] = useState("overview");
@@ -89,6 +114,10 @@ export default function EmployerPage() {
   }, [user, enterprises, myEnterprise]);
 
   const isEmployer = user?.accountType === "employer";
+
+  useEffect(() => {
+    if (org?.id) ensureEmployerInviteKeysForMyOrg();
+  }, [org?.id, ensureEmployerInviteKeysForMyOrg]);
 
   if (!isEmployer) {
     return <Navigate to="/dashboard" replace />;
@@ -117,7 +146,8 @@ export default function EmployerPage() {
         <h1>Employer hub</h1>
         <p>
           {org.name} — manage job roles and employer-set benefit rates. Edits apply everywhere that role is assigned,
-          including dependents and contributors on a synced household.
+          including dependents and contributors on a synced household. Invite keys are created automatically for each role;
+          copy them from <strong>Settings → Connections</strong>.
         </p>
       </header>
 
@@ -164,12 +194,18 @@ export default function EmployerPage() {
                 Snapshot — {activeRole.name}
               </h3>
               <ul className="checklist-open">
-                {activeRole.categories.map((c) => (
-                  <li key={c.name}>
-                    {c.name}: {Math.round(c.coverage * 100)}% coverage · ${c.annualLimit.toLocaleString()} annual · $
-                    {c.used.toLocaleString()} used
+                {(activeRole.categories || []).length ? (
+                  activeRole.categories.map((c, i) => (
+                    <li key={`${c.name}-${i}`}>
+                      {c.name}: {Math.round((c.coverage || 0) * 100)}% coverage · $
+                      {(c.annualLimit || 0).toLocaleString()} annual limit
+                    </li>
+                  ))
+                ) : (
+                  <li className="page-section-lead" style={{ listStyle: "none", margin: 0 }}>
+                    No categories defined for this role yet.
                   </li>
-                ))}
+                )}
               </ul>
             </div>
           ) : null}
@@ -190,8 +226,8 @@ export default function EmployerPage() {
                 </label>
               </div>
               <p className="page-section-lead">
-                Adjust limits for <strong>{role.name}</strong>. Assign this role during employee signup or when a family
-                owner links a household—everyone on that assignment refreshes together.
+                Set coverage and annual limits for <strong>{role.name}</strong>. Member usage starts at $0; this table is
+                only the plan design. Assign roles via invite keys (auto-created per role).
               </p>
               <CategoryEditor
                 categories={role.categories}
@@ -202,7 +238,10 @@ export default function EmployerPage() {
 
           <section className="contained employer-form-panel">
             <h2 className="page-section-title">Add role</h2>
-            <p className="page-section-lead">Creates a new template with the same categories as your first role—edit values freely.</p>
+            <p className="page-section-lead">
+              Creates a new template (categories start empty or copy from your first role if it has rows). An invite key
+              is created automatically.
+            </p>
             <div className="form-grid form-grid--inline">
               <label className="form-field">
                 Name

@@ -1,41 +1,7 @@
-import { insurers } from "./mockData";
-
-/** Clone categories from a mock insurer row for initial role templates */
-export function categoriesFromInsurer(insurerIndex = 0) {
-  const base = insurers[insurerIndex];
-  if (!base) return [];
-  return base.categories.map((c) => ({
-    name: c.name,
-    coverage: c.coverage,
-    annualLimit: c.annualLimit,
-    used: c.used,
-  }));
-}
-
-export const SEED_ENTERPRISES = [
-  {
-    id: "ent-sample",
-    name: "Sample Industries",
-    ownerEmail: "hr@sample.local",
-    employeeRoles: [
-      {
-        id: "role-ft",
-        name: "Full-time",
-        categories: categoriesFromInsurer(0),
-      },
-      {
-        id: "role-pt",
-        name: "Part-time",
-        categories: categoriesFromInsurer(0).map((c) => ({
-          ...c,
-          annualLimit: Math.round(c.annualLimit * 0.65),
-          used: Math.min(c.used, Math.round(c.annualLimit * 0.65)),
-        })),
-      },
-    ],
-  },
-];
-
+/**
+ * New employer organizations start with one empty role template.
+ * Benefit categories are added in Employer Hub (user-defined only).
+ */
 export function createEnterpriseFromSignup({ name, ownerEmail }) {
   const id = `ent-${Date.now().toString(36)}`;
   return {
@@ -45,17 +11,8 @@ export function createEnterpriseFromSignup({ name, ownerEmail }) {
     employeeRoles: [
       {
         id: `${id}-role-1`,
-        name: "Full-time",
-        categories: categoriesFromInsurer(0),
-      },
-      {
-        id: `${id}-role-2`,
-        name: "Part-time",
-        categories: categoriesFromInsurer(0).map((c) => ({
-          ...c,
-          annualLimit: Math.round(c.annualLimit * 0.65),
-          used: 0,
-        })),
+        name: "Primary role",
+        categories: [],
       },
     ],
   };

@@ -206,7 +206,7 @@ export default function HealthCompass() {
         if (!isCancelled) {
           setClinicDetails(Object.keys(data).length > 0 ? data : null);
         }
-      } catch (e) {
+      } catch {
         if (!isCancelled) setClinicDetails(null);
       } finally {
         if (!isCancelled) setIsDetailsLoading(false);

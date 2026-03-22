@@ -52,6 +52,7 @@ def normalize_clinic_type(google_types: list[str]) -> str:
 def fetch_google_clinics(lat: float, lng: float, clinic_type: str) -> list[dict[str, Any]]:
     api_key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
     if not api_key:
+        print("No API key found")
         return []
 
     params_dict = {

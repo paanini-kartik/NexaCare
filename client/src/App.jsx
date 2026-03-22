@@ -13,7 +13,8 @@ import LandingPage from "./pages/LandingPage";
 import SettingsPage from "./pages/SettingsPage";
 
 function HomeRedirect() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, authReady } = useAuth();
+  if (!authReady) return null;
   return <Navigate to={isAuthenticated ? "/dashboard" : "/landing"} replace />;
 }
 
