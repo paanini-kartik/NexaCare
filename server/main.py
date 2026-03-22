@@ -8,6 +8,7 @@ API keys off the browser and exposes `/api/clinics`.
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from pathlib import Path
 
 from routes import clinics
 
