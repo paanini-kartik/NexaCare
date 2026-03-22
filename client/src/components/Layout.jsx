@@ -25,13 +25,15 @@ export default function Layout() {
   const [notification, setNotification] = useState(null);
 
   const refreshAppointments = useCallback(async () => {
-    if (!user?.email) {
+    // Must match `userId` stored on appointment docs (Firebase uid preferred; email for local-only accounts)
+    const ownerKey = user?.uid || user?.email;
+    if (!ownerKey) {
       setAppointments([]);
       return [];
     }
 
     try {
-      const response = await apiFetch(`/api/appointments/${encodeURIComponent(user.email)}`);
+      const response = await apiFetch(`/api/appointments/${encodeURIComponent(ownerKey)}`);
       if (!response.ok) {
         return null;
       }
@@ -45,7 +47,7 @@ export default function Layout() {
     }
 
     return null;
-  }, [user?.email]);
+  }, [user?.uid, user?.email]);
 
   useEffect(() => {
     void refreshAppointments();

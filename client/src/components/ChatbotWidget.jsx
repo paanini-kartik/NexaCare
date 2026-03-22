@@ -550,12 +550,13 @@ export default function ChatbotWidget({
       }
     }
 
-    if (!realUser.email) {
+    const ownerKey = authUser?.uid || authUser?.email;
+    if (!ownerKey) {
       return appointments;
     }
 
     try {
-      const response = await apiFetch(`/api/appointments/${encodeURIComponent(realUser.email)}`);
+      const response = await apiFetch(`/api/appointments/${encodeURIComponent(ownerKey)}`);
       if (!response.ok) {
         return appointments;
       }
@@ -761,7 +762,7 @@ export default function ChatbotWidget({
           date: toolInput.date,
           duration: toolInput.duration,
           status: "upcoming",
-          userId: authUser?.id ?? authUser?.email ?? "user_demo_01",
+          userId: authUser?.uid || authUser?.email || "user_demo_01",
           userName: realUser.name,
           userEmail: realUser.email,
         };

@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { CHECKUP_TYPE_META, CORE_CHECKUP_KEYS, extraServicePolicyLine } from "../data/checkupConfig";
+import { apiFetch } from "../lib/api";
 import {
   effectiveDaysSinceForCore,
   effectiveDaysSinceForExtra,
@@ -16,14 +17,86 @@ export default function CheckupDashboardSection() {
   const { checkupSchedule, extraCareServices } = healthProfile;
   const { age, occupation, medicalHistory } = healthProfile;
 
+  const [aiIntervals, setAiIntervals] = useState(null);
+  const [aiSummary, setAiSummary] = useState(null);
+  const [cadenceLoading, setCadenceLoading] = useState(true);
+
+  const cadenceProfileKey = useMemo(
+    () =>
+      JSON.stringify({
+        age,
+        occupation,
+        medicalHistory: medicalHistory ?? [],
+        allergies: healthProfile?.allergies ?? [],
+        lastVisits: {
+          physical: checkupSchedule?.physical?.lastVisitISO ?? null,
+          dental: checkupSchedule?.dental?.lastVisitISO ?? null,
+          optometry: checkupSchedule?.optometry?.lastVisitISO ?? null,
+        },
+      }),
+    [age, occupation, medicalHistory, healthProfile?.allergies, checkupSchedule]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCadence() {
+      setCadenceLoading(true);
+      try {
+        const res = await apiFetch("/api/ai/cadence-intervals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            age,
+            occupation,
+            medicalHistory: medicalHistory ?? [],
+            allergies: healthProfile?.allergies ?? [],
+            lastVisits: {
+              physical: checkupSchedule?.physical?.lastVisitISO ?? null,
+              dental: checkupSchedule?.dental?.lastVisitISO ?? null,
+              optometry: checkupSchedule?.optometry?.lastVisitISO ?? null,
+            },
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled || !data?.ok) {
+          setAiIntervals(null);
+          setAiSummary(null);
+          return;
+        }
+        setAiIntervals({
+          physical: data.physicalDays,
+          dental: data.dentalDays,
+          optometry: data.visionDays,
+        });
+        setAiSummary(typeof data.summary === "string" ? data.summary.trim() : null);
+      } catch {
+        if (!cancelled) {
+          setAiIntervals(null);
+          setAiSummary(null);
+        }
+      } finally {
+        if (!cancelled) setCadenceLoading(false);
+      }
+    }
+
+    void loadCadence();
+    return () => {
+      cancelled = true;
+    };
+  }, [cadenceProfileKey]);
+
   const coreItems = useMemo(
     () =>
       CORE_CHECKUP_KEYS.map((key) => {
         const meta = CHECKUP_TYPE_META[key];
         const row = checkupSchedule[key];
-        const intervalDays = getCoreIntervalDays(age, occupation, medicalHistory, key);
+        const intervalDays = getCoreIntervalDays(age, occupation, medicalHistory, key, aiIntervals);
         const daysSinceLastVisit = effectiveDaysSinceForCore(row?.lastVisitISO, intervalDays);
-        const policyLine = `About every ${intervalDays} days based on your profile. Log your last visit on your health profile so this stays accurate.`;
+        const personalized = Boolean(aiIntervals);
+        const policyLine = personalized
+          ? `About every ${intervalDays} days — tuned from your health profile. Log your last visit so this ring stays accurate.`
+          : `About every ${intervalDays} days based on your profile. Log your last visit on your health profile so this stays accurate.`;
         return {
           key,
           policyLine,
@@ -33,7 +106,7 @@ export default function CheckupDashboardSection() {
           accent: meta.accent,
         };
       }),
-    [checkupSchedule, age, occupation, medicalHistory]
+    [checkupSchedule, age, occupation, medicalHistory, aiIntervals]
   );
 
   const extraItems = useMemo(
@@ -60,9 +133,20 @@ export default function CheckupDashboardSection() {
           Care windows
         </h2>
         <p className="checkup-dashboard-lead">
-          Each ring is time since your last visit. Physical, dental, and vision timing reflects what you’ve saved in your{" "}
-          <strong>Health profile</strong>. Optional services use standard suggested intervals.
+          Each ring shows time left until you’re due again (full ring = visit due). Spacing between visits for physical,
+          dental, and vision is{" "}
+          {cadenceLoading
+            ? "being personalized from your profile…"
+            : aiIntervals
+              ? "set with AI-assisted timing from your health profile."
+              : "estimated from age, work, and history on your profile (enable the Anthropic key on the server for smarter intervals). "}
+          Keep your <strong>Health profile</strong> updated so rings match reality.
         </p>
+        {aiSummary ? (
+          <p className="checkup-dashboard-ai-note" role="note">
+            <strong>Suggestion:</strong> {aiSummary}
+          </p>
+        ) : null}
       </header>
       <div className="checkup-dashboard-grid">
         {coreItems.map((item) => (

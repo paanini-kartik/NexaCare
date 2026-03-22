@@ -13,11 +13,30 @@ export function calendarDaysSinceLastVisit(isoDate) {
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
 
+/** Safe bounds for AI or manual overrides (matches server cadence clamps). */
+const CORE_INTERVAL_BOUNDS = {
+  physical: [90, 365],
+  dental: [90, 240],
+  optometry: [180, 730],
+};
+
+export function clampCoreIntervalDays(key, days) {
+  const [lo, hi] = CORE_INTERVAL_BOUNDS[key] || CORE_INTERVAL_BOUNDS.physical;
+  const n = Math.round(Number(days));
+  if (Number.isNaN(n)) return null;
+  return Math.min(hi, Math.max(lo, n));
+}
+
 /**
  * Recommended interval in days for core checkups from age, occupation, history.
- * Mirrors recommendationFromProfile logic.
+ * Optional `aiIntervals` (from /api/ai/cadence-intervals) overrides heuristics when present.
  */
-export function getCoreIntervalDays(age, occupation, medicalHistory, key) {
+export function getCoreIntervalDays(age, occupation, medicalHistory, key, aiIntervals = null) {
+  if (aiIntervals && typeof aiIntervals[key] === "number" && !Number.isNaN(aiIntervals[key])) {
+    const clamped = clampCoreIntervalDays(key, aiIntervals[key]);
+    if (clamped != null) return clamped;
+  }
+
   const parsedAge = Number(age || 0);
   const demandingJobs = ["nurse", "construction", "warehouse", "athlete", "firefighter"];
   const historyBlob = (medicalHistory || [])
