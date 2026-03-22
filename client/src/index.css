@@ -2139,26 +2139,34 @@ th { color: #334155; font-family: "General Sans", Inter, sans-serif; }
 /* Link */
 .chat-link { color: var(--primary); text-decoration: underline; }
 .chat-form {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin-top: auto;
-  padding: 0.75rem 1rem 0.85rem;
+  padding: 0.75rem 1rem 0.9rem;
   border-top: 1px solid var(--border-soft);
   background: var(--bg-elevated);
 }
-/* Chat inputs / send — rounded; overrides global sharp .chat-form input rule */
+/* Chat input — pill shape, elevated */
 .chatbot-mini .chat-form input {
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  padding: 0.65rem 0.85rem;
+  flex: 1;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  padding: 0.65rem 1.1rem;
   font-size: 0.9rem;
-  background: #fff;
+  background: #f8fafc;
   min-width: 0;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.chatbot-mini .chat-form input:focus {
+  border-color: var(--primary);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(26,122,74,0.1);
 }
 .chat-send-btn {
-  border-radius: 12px;
-  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  padding: 0.65rem 1.2rem;
   border: 0;
   background: var(--primary);
   color: #fff;
@@ -2170,10 +2178,14 @@ th { color: #334155; font-family: "General Sans", Inter, sans-serif; }
   transition: filter 0.15s ease, transform 0.15s ease;
 }
 .chat-send-btn:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.08);
 }
 .chat-send-btn:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
+}
+.chat-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .overlay-root { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: grid; place-items: center; z-index: 60; padding: 1rem; }

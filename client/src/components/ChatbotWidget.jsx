@@ -4,13 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
-
-const MOCK_USER = {
-  name: "Nicolas Miranda Cantanhede",
-  age: 34,
-  occupation: "Software Developer",
-  location: { lat: 43.6532, lng: -79.3832, city: "Toronto" },
-};
+import { useAuth } from "../contexts/AuthContext";
 
 const TOOLS = [
   {
@@ -80,6 +74,17 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: "cancel_appointment",
+    description: "Cancel an existing appointment by ID",
+    input_schema: {
+      type: "object",
+      required: ["appointmentId"],
+      properties: {
+        appointmentId: { type: "string", description: "The ID of the appointment to cancel" },
+      },
+    },
+  },
 ];
 
 function buildSystemPrompt(user, benefits, appointments) {
@@ -101,12 +106,13 @@ Use markdown tables when showing lists of appointments, clinics, or benefit summ
 When you book an appointment, also call update_benefit_usage with a reasonable estimated cost and show_notification to confirm.
 
 Rules:
-- Be friendly, direct, not clinical
-- Use **bold** for key numbers and dates
-- Use tables for lists of 3+ items
-- Always give a full text answer — never reply with just "Done!"
+- Keep ALL answers to 2-3 sentences max. Never write essays or numbered lists unless asked.
+- Be friendly and direct — not clinical, not over-explaining
+- Use **bold** for key numbers and dates only
+- Use tables ONLY when showing 3+ appointments or benefits side by side
+- Never reply with just "Done!" — always confirm what happened in 1 sentence
 - Reference specific benefit balances when relevant
-- Proactively mention overdue checkups`;
+- You CAN cancel appointments using the cancel_appointment tool — always do it when asked`;
 }
 
 // Rich markdown components
@@ -188,6 +194,35 @@ export default function ChatbotWidget({
   onUpdateBenefit,
   onShowNotification,
 }) {
+  const { user: authUser, benefitDashboardSummary } = useAuth();
+
+  // Build real user object from auth context
+  const realUser = {
+    name: authUser?.fullName || authUser?.name || authUser?.displayName || "there",
+    age: authUser?.age ?? null,
+    occupation: authUser?.occupation ?? "patient",
+    email: authUser?.email ?? "",
+    location: { city: "Toronto" },
+  };
+
+  // Map real benefit data from auth context
+  const realBenefits = (() => {
+    if (propBenefits) return propBenefits;
+    if (benefitDashboardSummary?.categories) {
+      const cats = benefitDashboardSummary.categories;
+      const find = (key) => cats.find((c) => c.key === key || c.label?.toLowerCase().includes(key));
+      const dental = find("dental");
+      const vision = find("vision");
+      const physio = find("physio") || find("physiotherapy");
+      return {
+        dental: { total: dental?.total ?? 0, used: dental?.used ?? 0 },
+        vision: { total: vision?.total ?? 0, used: vision?.used ?? 0 },
+        physio: { total: physio?.total ?? 0, used: physio?.used ?? 0 },
+      };
+    }
+    return null;
+  })();
+
   const appointments = propAppointments ?? [
     { id: "apt_01", type: "Annual Dental Checkup",  clinicName: "Smile Dental Studio",    date: "2026-04-02T10:00:00Z", duration: 60,  status: "upcoming" },
     { id: "apt_02", type: "Physiotherapy Session",  clinicName: "ActiveCare Physio",       date: "2026-04-10T14:30:00Z", duration: 45,  status: "upcoming" },
@@ -197,7 +232,7 @@ export default function ChatbotWidget({
   ];
 
   const [benefits, setBenefits] = useState(
-    propBenefits ?? {
+    realBenefits ?? propBenefits ?? {
       dental: { total: 1500, used: 400 },
       vision: { total: 600, used: 0 },
       physio: { total: 900, used: 200 },
@@ -212,10 +247,11 @@ export default function ChatbotWidget({
     { id: "c_05", name: "Toronto General Hosp.", type: "hospital", lat: 43.659, lng: -79.387 },
   ];
 
+  const firstName = realUser.name.split(" ")[0];
   const [messages, setMessages] = useState([
     {
       from: "bot",
-      text: `Hi Nicolas! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
+      text: `Hi ${firstName}! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
     },
   ]);
   const [history,  setHistory]  = useState([]);
@@ -229,10 +265,10 @@ export default function ChatbotWidget({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, open]);
 
-  function executeTool(name, toolInput) {
+  async function executeTool(name, toolInput) {
     switch (name) {
       case "get_user_profile":
-        return JSON.stringify(MOCK_USER);
+        return JSON.stringify(realUser);
 
       case "get_benefits":
         return JSON.stringify(benefits);
@@ -253,7 +289,25 @@ export default function ChatbotWidget({
           date: toolInput.date,
           duration: toolInput.duration,
           status: "upcoming",
+          userId: authUser?.id ?? authUser?.email ?? "user_demo_01",
+          userName: realUser.name,
+          userEmail: realUser.email,
         };
+
+        // Hit real backend — saves to Firebase + fires Resend emails
+        try {
+          const res = await fetch("http://localhost:8000/api/appointments/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newAppt),
+          });
+          const data = await res.json();
+          if (data.id) newAppt.id = data.id;
+          console.log("✅ Appointment saved to Firebase:", data.id);
+        } catch (err) {
+          console.warn("⚠️ Backend unavailable, saving locally only:", err.message);
+        }
+
         if (onBookAppointment) onBookAppointment(newAppt);
         return JSON.stringify({ success: true, appointment: newAppt });
       }
@@ -283,6 +337,19 @@ export default function ChatbotWidget({
         return JSON.stringify({ success: true });
       }
 
+      case "cancel_appointment": {
+        const { appointmentId } = toolInput;
+        try {
+          await fetch(`http://localhost:8000/api/appointments/${appointmentId}`, {
+            method: "DELETE",
+          });
+        } catch (err) {
+          console.warn("⚠️ Cancel backend unavailable:", err.message);
+        }
+        if (onBookAppointment) onBookAppointment({ id: appointmentId, _cancelled: true });
+        return JSON.stringify({ success: true, cancelled: appointmentId });
+      }
+
       default:
         return JSON.stringify({ error: "Unknown tool" });
     }
@@ -300,7 +367,7 @@ export default function ChatbotWidget({
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1024,
-        system: buildSystemPrompt(MOCK_USER, benefits, appointments),
+        system: buildSystemPrompt(realUser, benefits, appointments),
         tools: TOOLS,
         messages: apiMessages,
       }),
@@ -325,13 +392,13 @@ export default function ChatbotWidget({
         const toolUseBlocks = data.content.filter((b) => b.type === "tool_use");
 
         currentHistory = [...currentHistory, { role: "assistant", content: data.content }];
-
-        const toolResults = toolUseBlocks.map((block) => ({
-          type: "tool_result",
-          tool_use_id: block.id,
-          content: executeTool(block.name, block.input),
-        }));
-
+        const toolResults = await Promise.all(
+          toolUseBlocks.map(async (block) => ({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: await executeTool(block.name, block.input),
+          }))
+        );
         currentHistory = [...currentHistory, { role: "user", content: toolResults }];
 
         data = await callAPI(currentHistory);
