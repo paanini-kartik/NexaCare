@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { Clock, MapPin, Phone, Globe, Star } from "lucide-react";
 import { clinicLocations } from "../../data/mockData";
 
 const userIcon = new L.Icon({
@@ -74,7 +75,7 @@ export default function HealthCompass() {
   const [activeFilter, setActiveFilter] = useState("dental");
   const [query, setQuery] = useState("");
   const [selectedClinicId, setSelectedClinicId] = useState(null);
-  const [clinicsSource, setClinicsSource] = useState(clinicLocations);
+  const [clinicsSource, setClinicsSource] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState("");
   const [clinicDetails, setClinicDetails] = useState(null);
@@ -109,6 +110,7 @@ export default function HealthCompass() {
     async function loadClinics() {
       setIsLoading(true);
       setLoadMessage("");
+      setClinicsSource([]);
 
       try {
         const apiType = activeFilter === "vision" ? "optometry" : activeFilter;
@@ -243,7 +245,11 @@ export default function HealthCompass() {
           <h3>Health Compass Map</h3>
           <p>Tap a pin to view details and sync with the clinic panel.</p>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            {isLoading ? <p>Loading clinics...</p> : <p>{loadMessage}</p>}
+            {isLoading ? (
+              <p>Loading {activeFilter === "pharmacy" ? "pharmacies" : activeFilter === "hospital" ? "hospitals" : activeFilter === "dental" ? "dental clinics" : activeFilter === "vision" ? "vision centers" : "locations"}...</p>
+            ) : (
+              <p>{loadMessage}</p>
+            )}
             {locationError && <p style={{ color: "#ef4444", fontSize: "0.85rem", margin: 0 }}>📍 {locationError}</p>}
           </div>
           
@@ -316,7 +322,7 @@ export default function HealthCompass() {
                   
                   {clinicDetails.opening_hours?.weekday_text && (
                     <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-                      <span style={{ fontSize: "1.2rem" }}>🕒</span>
+                      <Clock size={18} color="#64748b" style={{ marginTop: "2px" }} />
                       <span style={{ fontSize: "0.95rem", color: "#64748b" }}>
                         {clinicDetails.opening_hours.weekday_text[(new Date().getDay() + 6) % 7]}
                       </span>
@@ -325,14 +331,14 @@ export default function HealthCompass() {
                   
                   {clinicDetails.formatted_address && (
                     <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-                      <span style={{ fontSize: "1.2rem" }}>📍</span>
-                      <span style={{ fontSize: "0.95rem" }}>{clinicDetails.formatted_address}</span>
+                      <MapPin size={18} color="#64748b" style={{ minWidth: "18px", marginTop: "2px" }} />
+                      <span style={{ fontSize: "0.95rem", color: "#334155" }}>{clinicDetails.formatted_address}</span>
                     </div>
                   )}
                   
                   {clinicDetails.formatted_phone_number && (
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ fontSize: "1.2rem" }}>📞</span>
+                      <Phone size={18} color="#64748b" style={{ minWidth: "18px" }} />
                       <a href={`tel:${clinicDetails.formatted_phone_number.replace(/\D/g,'')}`} style={{ fontSize: "0.95rem", color: "#2563eb", textDecoration: "none", fontWeight: "500" }}>
                         {clinicDetails.formatted_phone_number}
                       </a>
@@ -341,7 +347,7 @@ export default function HealthCompass() {
                   
                   {clinicDetails.website && (
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ fontSize: "1.2rem" }}>🌐</span>
+                      <Globe size={18} color="#64748b" style={{ minWidth: "18px" }} />
                       <a href={clinicDetails.website} target="_blank" rel="noreferrer" style={{ fontSize: "0.95rem", color: "#2563eb", textDecoration: "none", fontWeight: "500" }}>
                         Visit Website
                       </a>
@@ -350,7 +356,8 @@ export default function HealthCompass() {
                   
                   {(clinicDetails.rating) && (
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
-                      <span style={{ color: "#eab308", fontWeight: "bold" }}>★ {clinicDetails.rating}</span>
+                      <Star size={18} color="#eab308" fill="#eab308" style={{ minWidth: "18px" }} />
+                      <span style={{ color: "#334155", fontWeight: "600" }}>{clinicDetails.rating}</span>
                       <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({clinicDetails.user_ratings_total} reviews)</span>
                     </div>
                   )}
