@@ -2,6 +2,7 @@ import os
 import resend
 from fastapi import APIRouter, HTTPException
 from firebase import db
+from routes.calendar import add_calendar_event
 
 router = APIRouter()
 
@@ -100,6 +101,27 @@ def create_appointment(appointment: dict):
         # Fire confirmation emails — non-blocking, won't fail the request
         send_confirmation_emails(appointment)
 
+        # Auto-add to Google Calendar if user has connected it
+        try:
+            add_calendar_event({
+                "userEmail":  appointment.get("userEmail", ""),
+                "type":       appointment.get("type", "Appointment"),
+                "clinicName": appointment.get("clinicName", ""),
+                "date":       appointment.get("date", ""),
+                "duration":   appointment.get("duration", 45),
+            })
+        except Exception as cal_err:
+            print(f"⚠️  Calendar auto-add skipped: {cal_err}")
+
         return {"success": True, "id": appt_id, "appointment": saved}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{appointment_id}")
+def cancel_appointment(appointment_id: str):
+    try:
+        db.collection("appointments").document(appointment_id).delete()
+        return {"success": True, "cancelled": appointment_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

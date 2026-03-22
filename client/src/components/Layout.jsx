@@ -1,5 +1,5 @@
 import { Bell, Search, Settings } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import ChatbotWidget from "./ChatbotWidget";
@@ -18,9 +18,40 @@ const navItems = [
 
 export default function Layout() {
   const navigate = useNavigate();
-  const { user, logout, showOnboardingOverlay } = useAuth();
+  const { user, logout, showOnboardingOverlay, effectiveInsurers } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [notification, setNotification] = useState(null);
+
+  // Fetch real appointments from backend on login
+  useEffect(() => {
+    if (!user?.email) return;
+    fetch(`http://localhost:8000/api/appointments/${encodeURIComponent(user.email)}`)
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setAppointments(data); })
+      .catch(() => {});
+  }, [user?.email]);
+
+  // Map real benefits from effectiveInsurers (flatten all categories)
+  // Category names are: "Dental", "Optometry", "Physical" (from employerBenefitTemplates)
+  const mappedBenefits = useMemo(() => {
+    const allCats = (effectiveInsurers ?? []).flatMap((i) => i.categories ?? []);
+    if (!allCats.length) return null;
+    const find = (...keys) =>
+      allCats.find((c) =>
+        keys.some((k) => String(c.name ?? c.label ?? c.key ?? "").toLowerCase().includes(k))
+      );
+    const dental = find("dental");
+    const vision = find("vision", "optometry", "eye");
+    const physio = find("physio", "physical", "physiotherapy");
+    // Return null only if ALL three are missing AND have zero limit
+    const hasAny = [dental, vision, physio].some((c) => c && (c.annualLimit ?? 0) > 0);
+    return {
+      dental: { total: dental?.annualLimit ?? 0, used: dental?.used ?? 0 },
+      vision: { total: vision?.annualLimit ?? 0, used: vision?.used ?? 0 },
+      physio: { total: physio?.annualLimit ?? 0, used: physio?.used ?? 0 },
+      hasAny,
+    };
+  }, [effectiveInsurers]);
 
   const visibleNavItems = useMemo(
     () =>
@@ -112,6 +143,7 @@ export default function Layout() {
 
       <ChatbotWidget
         appointments={appointments}
+        benefits={mappedBenefits}
         onBookAppointment={handleBookAppointment}
         onShowNotification={handleShowNotification}
       />
