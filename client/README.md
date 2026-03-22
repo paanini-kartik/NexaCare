@@ -16,6 +16,17 @@ npm run dev
 
 Open the Vite URL (usually http://localhost:5173).
 
+### `npm install` fails with `EBADPLATFORM` / `fdir` + `win32`
+
+That usually means `package-lock.json` was corrupted (duplicate `node_modules/fdir` entries). Fix:
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+The `npm warn Unknown env config "devdir"` message comes from a **global** npm config entry; remove `devdir` from `~/.npmrc` if you want to silence it.
+
 ## Build check
 
 ```bash
