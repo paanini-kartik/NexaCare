@@ -1044,13 +1044,28 @@ export default function ChatbotWidget({
     const systemPrompt = buildSystemPrompt(realUser, benefits, liveAppointments);
     systemPromptRef.current = systemPrompt;
 
-    // Keep at most the last 10 messages (5 turns) to stay under rate limits.
-    // Always keep the first message so early context isn't lost mid-session.
+    // Keep at most the last 10 messages to stay under rate limits, but always
+    // trim at a clean boundary so we never orphan a tool_result from its tool_use.
+    // Anthropic requires every tool_result to have a matching tool_use in the
+    // immediately preceding assistant message — cutting mid-pair causes 400 errors.
     const MAX_HISTORY = 10;
-    const trimmed =
-      apiMessages.length > MAX_HISTORY
-        ? [apiMessages[0], ...apiMessages.slice(-MAX_HISTORY + 1)]
-        : apiMessages;
+    function trimHistory(msgs) {
+      if (msgs.length <= MAX_HISTORY) return msgs;
+      const tail = msgs.slice(-MAX_HISTORY);
+      // Walk forward until we find a user message with plain (non-tool_result) content.
+      for (let i = 0; i < tail.length; i++) {
+        const m = tail[i];
+        if (m.role === "user") {
+          const isToolResult =
+            Array.isArray(m.content) &&
+            m.content.some((b) => b.type === "tool_result");
+          if (!isToolResult) return tail.slice(i);
+        }
+      }
+      // Fallback: just the last user+assistant pair
+      return msgs.slice(-2);
+    }
+    const trimmed = trimHistory(apiMessages);
 
     const response = await fetch(apiUrl("/api/ai/chat"), {
       method: "POST",
