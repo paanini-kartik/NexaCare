@@ -1,5 +1,7 @@
 import json
 import os
+import ssl
+import time
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -7,6 +9,37 @@ from urllib.request import urlopen
 from fastapi import APIRouter
 
 router = APIRouter()
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """
+    macOS / some Python builds ship without a usable CA store for urllib;
+    certifi provides Mozilla's bundle so Google HTTPS verifies.
+    """
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
+def _https_json(url: str, timeout: float = 8) -> dict[str, Any]:
+    ctx = _ssl_context()
+    with urlopen(url, timeout=timeout, context=ctx) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _google_maps_api_key() -> str:
+    """Read key from env; supports common alternate names and quoted values in .env files."""
+    for name in ("GOOGLE_MAPS_API_KEY", "GOOGLE_MAPS_KEY", "MAPS_API_KEY"):
+        raw = os.getenv(name)
+        if not raw:
+            continue
+        v = raw.strip().strip('"').strip("'")
+        if v:
+            return v
+    return ""
 
 MOCK_CLINICS = [
     {"id": "c1", "name": "Downtown Dental", "type": "dental", "lat": 43.6510, "lng": -79.3470, "acceptedBenefits": ["dental"]},
@@ -50,9 +83,9 @@ def normalize_clinic_type(google_types: list[str]) -> str:
 
 
 def fetch_google_clinics(lat: float, lng: float, clinic_type: str) -> list[dict[str, Any]]:
-    api_key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+    api_key = _google_maps_api_key()
     if not api_key:
-        print("No API key found")
+        print("No Google Maps / Places API key found (set GOOGLE_MAPS_API_KEY in .env)")
         return []
 
     params_dict = {
@@ -76,16 +109,19 @@ def fetch_google_clinics(lat: float, lng: float, clinic_type: str) -> list[dict[
 
     all_results = []
     for _ in range(1):  # Fetch 1 page (fast load time, 20 results)
-        with urlopen(url, timeout=8) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        
+        payload = _https_json(url, timeout=8)
+
+        status = payload.get("status")
+        if status not in ("OK", "ZERO_RESULTS"):
+            err = payload.get("error_message") or ""
+            print(f"Google Places nearby search status={status} {err}".strip())
+
         all_results.extend(payload.get("results", []))
-        
+
         next_page_token = payload.get("next_page_token")
         if not next_page_token:
             break
-            
-        import time
+
         time.sleep(2)  # Google requires a short delay before token is valid
         next_params = urlencode({"pagetoken": next_page_token, "key": api_key})
         url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?{next_params}"
@@ -130,7 +166,7 @@ def get_clinics(lat: float = 43.6532, lng: float = -79.3832, type: str = "all"):
 
 @router.get("/{place_id}")
 def get_clinic_details(place_id: str):
-    api_key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+    api_key = _google_maps_api_key()
     if not api_key:
         return {}
 
@@ -143,8 +179,12 @@ def get_clinic_details(place_id: str):
     url = f"https://maps.googleapis.com/maps/api/place/details/json?{params}"
 
     try:
-        with urlopen(url, timeout=8) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = _https_json(url, timeout=8)
+        status = payload.get("status")
+        if status != "OK":
+            err = payload.get("error_message") or ""
+            print(f"Google Place Details status={status} {err}".strip())
+            return {}
         return payload.get("result", {})
     except Exception as e:
         print(f"API Error fetching place details: {e}")
