@@ -615,7 +615,10 @@ export function AuthProvider({ children }) {
     const parts = benefitSources
       .map((res) => {
         if (res.kind === "manual" && res.manual) {
-          return `${res.manual.provider} — ${res.manual.plan}`;
+          const p  = res.manual.provider || res.manual.name || "";
+          const pl = res.manual.plan     || res.manual.planName || "";
+          const nameParts = [p, pl].filter(Boolean);
+          return nameParts.length ? nameParts.join(" — ") : null;
         }
         const ent = resolvedEnterprises.find((e) => e.id === res.enterpriseId);
         if (!ent) return null;

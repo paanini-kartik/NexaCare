@@ -548,7 +548,7 @@ export default function SettingsPage() {
                         <div key={p.id} className="settings-family-board" style={{ marginBottom: "1rem" }}>
                           <div className="employer-role-head" style={{ alignItems: "center" }}>
                             <strong>
-                              {p.provider} — {p.plan}
+                              {p.provider || p.name || "Provider"} — {p.plan || p.planName || "Plan"}
                             </strong>
                             <button
                               className="secondary-btn"
@@ -583,7 +583,7 @@ export default function SettingsPage() {
                           {(currentFamily.manualProviders || []).map((p) => (
                             <li key={p.id}>
                               <strong>
-                                {p.provider} — {p.plan}
+                                {p.provider || p.name || "Provider"} — {p.plan || p.planName || "Plan"}
                               </strong>
                               <ul>
                                 {(p.categories || []).map((c, ci) => (
@@ -651,7 +651,7 @@ export default function SettingsPage() {
                       <div key={p.id} className="settings-family-board" style={{ marginBottom: "1rem" }}>
                         <div className="employer-role-head" style={{ alignItems: "center" }}>
                           <strong>
-                            {p.provider} — {p.plan}
+                            {p.provider || p.name || "Provider"} — {p.plan || p.planName || "Plan"}
                           </strong>
                           <button
                             className="secondary-btn"
