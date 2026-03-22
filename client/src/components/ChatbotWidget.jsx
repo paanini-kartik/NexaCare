@@ -1005,27 +1005,20 @@ export default function ChatbotWidget({
 
   const onSubmit = (e) => { e.preventDefault(); sendMessage(input.trim()); };
 
-  // ── PDF text extraction via pdfjs-dist ──────────────────────────────────
+  // ── PDF text extraction via backend (pypdf) ─────────────────────────────
   async function extractPdfText(file) {
-    try {
-      const pdfjsLib = await import("pdfjs-dist");
-      // v5 requires the worker URL to match the exact installed version
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-      const buffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-      const pageTexts = await Promise.all(
-        Array.from({ length: pdf.numPages }, (_, i) =>
-          pdf.getPage(i + 1)
-            .then((p) => p.getTextContent())
-            .then((tc) => tc.items.map((it) => it.str).join(" "))
-        )
-      );
-      return pageTexts.join("\n\n");
-    } catch (err) {
-      console.error("PDF extraction failed:", err);
-      throw new Error("Could not read the PDF. Make sure it's a valid, non-scanned PDF.");
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("http://localhost:8000/api/pdf/extract-text", {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail ?? "Could not read the PDF. Make sure it's a valid, non-scanned PDF.");
     }
+    const { text } = await res.json();
+    return text;
   }
 
   // ── File upload handler ─────────────────────────────────────────────────
