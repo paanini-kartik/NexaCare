@@ -949,7 +949,11 @@ export default function ChatbotWidget({
       }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message ?? `Error ${response.status}`);
+    if (!response.ok) {
+      // FastAPI uses `detail`, Anthropic uses `error.message`
+      const msg = data.detail ?? data.error?.message ?? `Error ${response.status}`;
+      throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    }
     return data;
   }
 
