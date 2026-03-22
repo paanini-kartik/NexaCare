@@ -106,7 +106,7 @@ function MapResizeFix() {
   return null;
 }
 
-export default function HealthCompass() {
+export default function HealthCompass({ onBookingComplete }) {
   const { user } = useAuth();
   const { refreshAppointments } = useOutletContext() ?? {};
   const [activeFilter, setActiveFilter] = useState("dental");
@@ -159,7 +159,7 @@ export default function HealthCompass() {
 
       try {
         const apiType = activeFilter === "vision" ? "optometry" : activeFilter;
-        const response = await fetch(`/api/clinics/?lat=${userLocation.lat}&lng=${userLocation.lng}&type=${apiType}`);
+        const response = await apiFetch(`/api/clinics/?lat=${userLocation.lat}&lng=${userLocation.lng}&type=${apiType}`);
         if (!response.ok) {
           throw new Error(`Clinics API returned ${response.status}`);
         }
@@ -219,7 +219,7 @@ export default function HealthCompass() {
     async function fetchDetails() {
       setIsDetailsLoading(true);
       try {
-        const response = await fetch(`/api/clinics/${selectedClinicId}`);
+        const response = await apiFetch(`/api/clinics/${selectedClinicId}`);
         if (!response.ok) throw new Error("Details fetch failed");
         const data = await response.json();
         if (!isCancelled) {
@@ -344,12 +344,18 @@ export default function HealthCompass() {
         <section className="card-surface health-compass-side">
           <h3>Nearby Clinics</h3>
           <div className="health-compass-clinic-scroll list-stack" role="region" aria-label="Scrollable clinic list">
-            {filteredClinics.map((clinic) => (
-              <article key={clinic.id} className={`list-card ${selectedClinicId === clinic.id ? "selected" : ""}`} onClick={() => setSelectedClinicId(clinic.id)}>
-                <div><strong>{clinic.name}</strong><p style={{ textTransform: "capitalize" }}>{clinic.type}</p></div>
-                <span className={`pill ${clinic.benefits ? "ok" : "plain"}`}>{clinic.benefits ? "Benefits" : "Self-pay"}</span>
-              </article>
-            ))}
+            {isLoading ? (
+              <p style={{ padding: "1rem", color: "#64748b" }}>Loading clinics…</p>
+            ) : filteredClinics.length === 0 ? (
+              <p style={{ padding: "1rem", color: "#64748b" }}>No clinics found for this filter.</p>
+            ) : (
+              filteredClinics.map((clinic) => (
+                <article key={clinic.id} className={`list-card ${selectedClinicId === clinic.id ? "selected" : ""}`} onClick={() => setSelectedClinicId(clinic.id)}>
+                  <div><strong>{clinic.name}</strong><p style={{ textTransform: "capitalize" }}>{clinic.type}</p></div>
+                  <span className={`pill ${clinic.benefits ? "ok" : "plain"}`}>{clinic.benefits ? "Benefits" : "Self-pay"}</span>
+                </article>
+              ))
+            )}
           </div>
         </section>
       </div>
@@ -368,11 +374,15 @@ export default function HealthCompass() {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    userId: user?.uid || user?.email || "guest",
+                    userId: user?.email || user?.uid || "guest",
                     userEmail: user?.email || "demo@example.com",
                     userName: user?.fullName || "Patient",
                     clinicName: selectedClinic.name,
-                    type: selectedClinic.type || "Appointment",
+                    type: selectedClinic.type === "dental" ? "Dental Appointment"
+                        : selectedClinic.type === "optometry" ? "Optometry / Eye Exam"
+                        : selectedClinic.type === "pharmacy" ? "Pharmacy Visit"
+                        : selectedClinic.type === "hospital" ? "Medical Appointment"
+                        : "Appointment",
                     date: localDateAndTimeToIsoUtc(apptDate, apptTime),
                     duration: 45,
                   }),
