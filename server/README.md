@@ -13,9 +13,11 @@ From repo root (with a virtualenv if you use one):
 
 ```bash
 cd server
-pip install fastapi uvicorn python-dotenv
+pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
+
+**SSL errors to Google (`CERTIFICATE_VERIFY_FAILED` on macOS):** the app uses **`certifi`** for CA certificates. If you still see verify errors, run `pip install -r requirements.txt` again or install certs for your Python (e.g. Python.org macOS installer: run **Install Certificates.command** in the Python folder).
 
 The Vite dev server proxies `/api/*` to `http://localhost:8000` by default. Override with:
 
@@ -30,4 +32,10 @@ The Vite dev server proxies `/api/*` to `http://localhost:8000` by default. Over
 
 ## Env
 
-Clinics route uses `GOOGLE_MAPS_API_KEY` (or related) from the environment — see `routes/clinics.py` for exact variable names.
+| Variable | Notes |
+|----------|--------|
+| `GOOGLE_MAPS_API_KEY` | Primary. Also accepts `GOOGLE_MAPS_KEY` or `MAPS_API_KEY`. |
+
+**Where to put it:** `load_dotenv` loads **`NexaCare/.env`** then **`server/.env`** (server wins if both set). You can start uvicorn from any directory.
+
+**Google Cloud:** Enable **Places API** (legacy Nearby Search / Place Details URLs), turn on **billing**, and use a key **not** restricted to HTTP referrers (use IP / unrestricted for local dev). See `.env.example`.

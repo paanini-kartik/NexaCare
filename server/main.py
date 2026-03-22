@@ -6,14 +6,19 @@ via Firebase Auth + Firestore (client SDK). This service keeps Google Places / M
 API keys off the browser and exposes `/api/clinics`.
 """
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from routes import clinics
 
-# Load from root NexaCare/.env first, then fall back to server/.env
-load_dotenv(Path(__file__).parent.parent / ".env")
-load_dotenv()
+_server_dir = Path(__file__).resolve().parent
+_repo_root = _server_dir.parent
+
+# Repo-root `.env` (e.g. NexaCare/.env), then `server/.env` (overrides). CWD no longer matters for uvicorn.
+load_dotenv(_repo_root / ".env")
+load_dotenv(_server_dir / ".env", override=True)
 
 app = FastAPI(title="NexaCare API", version="1.0.0")
 
