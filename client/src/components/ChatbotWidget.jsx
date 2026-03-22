@@ -198,7 +198,7 @@ export default function ChatbotWidget({
 
   // Build real user object from auth context
   const realUser = {
-    name: authUser?.name || authUser?.email?.split("@")[0] || "there",
+    name: authUser?.fullName || authUser?.name || authUser?.displayName || "there",
     age: authUser?.age ?? null,
     occupation: authUser?.occupation ?? "patient",
     email: authUser?.email ?? "",
