@@ -450,10 +450,23 @@ export default function ChatbotWidget({
       case "get_appointments":
         return JSON.stringify(appointments);
 
-      case "find_clinics":
-        return JSON.stringify(
-          toolInput.type ? clinics.filter((c) => c.type === toolInput.type) : clinics
-        );
+      case "find_clinics": {
+        const userLat = 43.6532;
+        const userLng = -79.3832;
+        const typeParam = toolInput.type ?? "all";
+        try {
+          const res = await fetch(
+            `http://localhost:8000/api/clinics?lat=${userLat}&lng=${userLng}&type=${typeParam}`
+          );
+          const data = await res.json();
+          return JSON.stringify(Array.isArray(data) ? data : clinics);
+        } catch {
+          // fallback to prop clinics if backend is down
+          return JSON.stringify(
+            toolInput.type ? clinics.filter((c) => c.type === toolInput.type) : clinics
+          );
+        }
+      }
 
       case "book_appointment": {
         const newAppt = {

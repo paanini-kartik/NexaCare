@@ -17,7 +17,7 @@ load_dotenv(_server_dir / ".env", override=True)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import clinics, appointments
+from routes import clinics, appointments, users, benefits, health as health_route
 
 
 app = FastAPI(title="NexaCare API", version="1.0.0")
@@ -36,5 +36,8 @@ def health_check():
     return {"status": "ok"}
 
 
-app.include_router(clinics.router, prefix="/api/clinics")
-app.include_router(appointments.router, prefix="/api/appointments")
+app.include_router(clinics.router,       prefix="/api/clinics")
+app.include_router(appointments.router,  prefix="/api/appointments")
+app.include_router(users.router,         prefix="/api/users")
+app.include_router(benefits.router,      prefix="/api/benefits")
+app.include_router(health_route.router,  prefix="/api/health-profile")

@@ -103,3 +103,12 @@ def create_appointment(appointment: dict):
         return {"success": True, "id": appt_id, "appointment": saved}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{appointment_id}")
+def cancel_appointment(appointment_id: str):
+    try:
+        db.collection("appointments").document(appointment_id).delete()
+        return {"success": True, "cancelled": appointment_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
