@@ -4,6 +4,9 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { Clock, MapPin, Phone, Globe, Star, Navigation } from "lucide-react";
 import { clinicLocations } from "../../data/mockData";
+import { apiFetch } from "../../lib/api";
+import { useAuth } from "../../contexts/AuthContext";
+
 
 const userIcon = new L.Icon({
   iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
@@ -71,6 +74,8 @@ function MapViewportController({ clinics, selectedClinic }) {
   return null;
 }
 
+
+
 /** Map uses a fixed viewport height; one paint + debounced window resize avoids jittery invalidateSize bursts. */
 function MapResizeFix() {
   const map = useMap();
@@ -100,7 +105,9 @@ function MapResizeFix() {
 }
 
 export default function HealthCompass() {
+  const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState("dental");
+
   const [query, setQuery] = useState("");
   const [selectedClinicId, setSelectedClinicId] = useState(null);
   const [clinicsSource, setClinicsSource] = useState([]);
@@ -110,6 +117,13 @@ export default function HealthCompass() {
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState(null);
+  
+  // Booking state
+  const [isBookingLoading, setIsBookingLoading] = useState(false);
+  const [bookingMsg, setBookingMsg] = useState("");
+  const [apptDate, setApptDate] = useState("");
+  const [apptTime, setApptTime] = useState("09:00");
+  const [showBookingModal, setShowBookingModal] = useState(false);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -148,47 +162,33 @@ export default function HealthCompass() {
         }
 
         const payload = await response.json();
-        if (!Array.isArray(payload)) {
-          throw new Error("Clinics API payload is not an array");
-        }
-
         const mapped = payload
           .map((clinic, index) => toCompassClinic(clinic, index))
           .filter((clinic) => Number.isFinite(clinic.lat) && Number.isFinite(clinic.lng));
 
-        if (!mapped.length) {
-          throw new Error("Clinics API returned no valid coordinates");
-        }
-
         if (!isCancelled) {
-          setClinicsSource(mapped);
-          setLoadMessage("Showing live clinics from API.");
+          setClinicsSource(mapped.length ? mapped : clinicLocations);
+          setLoadMessage(mapped.length ? "Showing live clinics from API." : "No clinics found nearby. Using mock data.");
         }
       } catch {
         if (!isCancelled) {
           setClinicsSource(clinicLocations);
-          setLoadMessage("Using local mock clinics. Start backend to load live data.");
+          setLoadMessage("Using local mock clinics. Start backend for live data.");
         }
       } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
+        if (!isCancelled) setIsLoading(false);
       }
     }
 
     loadClinics();
-
-    return () => {
-      isCancelled = true;
-    };
+    return () => { isCancelled = true; };
   }, [activeFilter, userLocation]);
 
   const normalizedClinics = useMemo(
-    () =>
-      clinicsSource.map((clinic) => ({
-        ...clinic,
-        normalizedType: normalizeClinicType(clinic),
-      })),
+    () => clinicsSource.map((clinic) => ({
+      ...clinic,
+      normalizedType: normalizeClinicType(clinic),
+    })),
     [clinicsSource]
   );
 
@@ -200,18 +200,6 @@ export default function HealthCompass() {
       return matchesType && matchesQuery;
     });
   }, [activeFilter, query, normalizedClinics]);
-
-  useEffect(() => {
-    if (!filteredClinics.length) {
-      setSelectedClinicId(null);
-      return;
-    }
-
-    const selectedStillVisible = filteredClinics.some((clinic) => clinic.id === selectedClinicId);
-    if (!selectedStillVisible) {
-      setSelectedClinicId(filteredClinics[0].id);
-    }
-  }, [filteredClinics, selectedClinicId]);
 
   const selectedClinic = useMemo(
     () => filteredClinics.find((clinic) => clinic.id === selectedClinicId) || null,
@@ -271,20 +259,20 @@ export default function HealthCompass() {
       <div className="health-compass-layout">
         <section className="card-surface health-compass-map">
           <h3>Health Compass Map</h3>
-          <p>Tap a pin to view details and sync with the clinic panel.</p>
+          <p>Tap a pin to view details and selection.</p>
           <div className="health-compass-map-meta">
             {isLoading ? (
               <p>Loading {activeFilter === "pharmacy" ? "pharmacies" : activeFilter === "hospital" ? "hospitals" : activeFilter === "dental" ? "dental clinics" : activeFilter === "vision" ? "vision centers" : "locations"}...</p>
             ) : (
               <p>{loadMessage}</p>
             )}
-            {locationError && <p className="health-compass-map-meta-error">📍 {locationError}</p>}
+            {locationError && <p className="error-text">📍 {locationError}</p>}
           </div>
           
           <div className="map-frame-wrap health-compass-map-live">
             {!userLocation ? (
               <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", background: "#f1f5f9", borderRadius: "12px" }}>
-                <p style={{ color: "#64748b", fontWeight: "500" }}>Finding your location...</p>
+                <p>Finding location...</p>
               </div>
             ) : (
               <MapContainer center={[userLocation.lat, userLocation.lng]} zoom={13} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
@@ -294,179 +282,124 @@ export default function HealthCompass() {
                 />
                 <MapResizeFix />
                 <MapViewportController clinics={filteredClinics} selectedClinic={selectedClinic} />
-                
-                <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
-                  <Popup>
-                  <strong>You are here</strong>
-                </Popup>
-              </Marker>
-
-              {filteredClinics.map((clinic) => {
-                const isSelected = clinic.id === selectedClinicId;
-                return (
+                <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon} />
+                {filteredClinics.map((clinic) => (
                   <CircleMarker
                     key={clinic.id}
                     center={[clinic.lat, clinic.lng]}
-                    radius={isSelected ? 11 : 8}
-                    pathOptions={{
-                      color: "#ffffff",
-                      weight: 2,
-                      fillColor: typeColor(clinic.normalizedType),
-                      fillOpacity: isSelected ? 0.95 : 0.78,
-                    }}
-                    eventHandlers={{
-                      click: () => setSelectedClinicId(clinic.id),
-                    }}
+                    radius={clinic.id === selectedClinicId ? 11 : 8}
+                    pathOptions={{ color: "#fff", weight: 2, fillColor: typeColor(clinic.normalizedType), fillOpacity: 0.8 }}
+                    eventHandlers={{ click: () => setSelectedClinicId(clinic.id) }}
                   >
-                    <Popup>
-                      <strong>{clinic.name}</strong>
-                      <br />
-                      {clinic.type}
-                      <br />
-                      {clinic.acceptedBenefits?.length ? `Benefits: ${clinic.acceptedBenefits.join(", ")}` : "No listed benefits"}
-                    </Popup>
+                    <Popup><strong>{clinic.name}</strong><br/>{clinic.type}</Popup>
                   </CircleMarker>
-                );
-              })}
-            </MapContainer>
+                ))}
+              </MapContainer>
             )}
           </div>
 
-          {selectedClinic ? (
-            <article className="health-compass-selected">
+          {selectedClinic && (
+            <article className="health-compass-selected" style={{ marginTop: "1.5rem" }}>
               <h4>{selectedClinic.name}</h4>
-              <p style={{ textTransform: "capitalize", color: "var(--text-secondary, #64748b)" }}>
-                {selectedClinic.type}
-              </p>
-
+              <p style={{ textTransform: "capitalize", color: "#64748b" }}>{selectedClinic.type}</p>
+              
               {userLocation && (
                 <a 
                   href={`https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${selectedClinic.lat},${selectedClinic.lng}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    marginTop: "0.75rem",
-                    padding: "0.5rem 1rem",
-                    backgroundColor: "#2563eb",
-                    color: "white",
-                    borderRadius: "8px",
-                    fontWeight: "500",
-                    textDecoration: "none",
-                    boxShadow: "0 2px 4px rgba(37,99,235,0.2)",
-                    fontSize: "0.95rem",
-                    width: "fit-content",
-                    transition: "opacity 0.2s ease"
-                  }}
-                  onMouseOver={(e) => e.currentTarget.style.opacity = "0.9"}
-                  onMouseOut={(e) => e.currentTarget.style.opacity = "1"}
+                  target="_blank" rel="noreferrer" className="primary-btn" style={{ marginTop: "0.75rem", textDecoration: "none", display: "inline-flex" }}
                 >
-                  <Navigation size={18} />
-                  Get Directions
+                  <Navigation size={18} style={{ marginRight: "0.5rem" }} /> Get Directions
                 </a>
               )}
-              
+
               {isDetailsLoading ? (
-                <div style={{ padding: "1rem 0", color: "#64748b", fontSize: "0.9rem" }}>Loading place details...</div>
+                <p>Loading details...</p>
               ) : clinicDetails ? (
                 <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                  {clinicDetails.editorial_summary?.overview && (
-                    <p style={{ fontStyle: "italic", fontSize: "0.95rem", lineHeight: "1.4" }}>
-                      "{clinicDetails.editorial_summary.overview}"
-                    </p>
-                  )}
-                  
-                  {clinicDetails.opening_hours?.weekday_text && (
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-                      <Clock size={18} color="#64748b" style={{ marginTop: "2px" }} />
-                      <span style={{ fontSize: "0.95rem", color: "#64748b" }}>
-                        {clinicDetails.opening_hours.weekday_text[(new Date().getDay() + 6) % 7]}
-                      </span>
-                    </div>
-                  )}
-                  
                   {clinicDetails.formatted_address && (
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-                      <MapPin size={18} color="#64748b" style={{ minWidth: "18px", marginTop: "2px" }} />
-                      <span style={{ fontSize: "0.95rem", color: "#334155" }}>{clinicDetails.formatted_address}</span>
-                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}><MapPin size={18} color="#64748b" /><span>{clinicDetails.formatted_address}</span></div>
                   )}
-                  
                   {clinicDetails.formatted_phone_number && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <Phone size={18} color="#64748b" style={{ minWidth: "18px" }} />
-                      <a href={`tel:${clinicDetails.formatted_phone_number.replace(/\D/g,'')}`} style={{ fontSize: "0.95rem", color: "#2563eb", textDecoration: "none", fontWeight: "500" }}>
-                        {clinicDetails.formatted_phone_number}
-                      </a>
-                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}><Phone size={18} color="#64748b" /><a href={`tel:${clinicDetails.formatted_phone_number}`}>{clinicDetails.formatted_phone_number}</a></div>
                   )}
-                  
-                  {clinicDetails.website && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <Globe size={18} color="#64748b" style={{ minWidth: "18px" }} />
-                      <a href={clinicDetails.website} target="_blank" rel="noreferrer" style={{ fontSize: "0.95rem", color: "#2563eb", textDecoration: "none", fontWeight: "500" }}>
-                        Visit Website
-                      </a>
-                    </div>
+                  {clinicDetails.rating && (
+                    <div style={{ display: "flex", gap: "0.5rem" }}><Star size={18} color="#eab308" fill="#eab308" /><span>{clinicDetails.rating} ({clinicDetails.user_ratings_total} reviews)</span></div>
                   )}
-                  
-                  {(clinicDetails.rating) && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
-                      <Star size={18} color="#eab308" fill="#eab308" style={{ minWidth: "18px" }} />
-                      <span style={{ color: "#334155", fontWeight: "600" }}>{clinicDetails.rating}</span>
-                      <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({clinicDetails.user_ratings_total} reviews)</span>
-                    </div>
-                  )}
+                  <button className="primary-btn" style={{ marginTop: "1rem", width: "100%", justifyContent: "center" }} onClick={() => setShowBookingModal(true)}>
+                    Book Appointment
+                  </button>
                 </div>
               ) : (
-                <div style={{ marginTop: "1rem" }}>
-                   <p style={{ color: "#64748b", fontSize: "0.9rem" }}>No extended details available for this location.</p>
-                </div>
+                <button className="primary-btn" style={{ marginTop: "1rem", width: "100%", justifyContent: "center" }} onClick={() => setShowBookingModal(true)}>
+                  Book Appointment
+                </button>
               )}
-
-              <div style={{ marginTop: "1.5rem", borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
-                <span className={`pill ${selectedClinic.benefits ? "ok" : "plain"}`}>
-                  {selectedClinic.benefits ? "Accepts NexaCare Benefits" : "Self-pay / Out of network"}
-                </span>
-                {selectedClinic.acceptedBenefits?.length > 0 && (
-                  <p style={{ fontSize: "0.85rem", color: "#64748b", marginTop: "0.5rem" }}>
-                    Eligible for: <span style={{ textTransform: "capitalize" }}>{selectedClinic.acceptedBenefits.join(", ")}</span>
-                  </p>
-                )}
-              </div>
             </article>
-          ) : null}
+          )}
         </section>
 
         <section className="card-surface health-compass-side">
           <h3>Nearby Clinics</h3>
           <div className="health-compass-clinic-scroll list-stack" role="region" aria-label="Scrollable clinic list">
             {filteredClinics.map((clinic) => (
-              <article
-                key={clinic.id}
-                className={`list-card ${selectedClinicId === clinic.id ? "selected" : ""}`}
-                onClick={() => setSelectedClinicId(clinic.id)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setSelectedClinicId(clinic.id);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-              >
-                <div>
-                  <strong>{clinic.name}</strong>
-                  <p style={{ textTransform: "capitalize" }}>{clinic.type}</p>
-                </div>
+              <article key={clinic.id} className={`list-card ${selectedClinicId === clinic.id ? "selected" : ""}`} onClick={() => setSelectedClinicId(clinic.id)}>
+                <div><strong>{clinic.name}</strong><p style={{ textTransform: "capitalize" }}>{clinic.type}</p></div>
                 <span className={`pill ${clinic.benefits ? "ok" : "plain"}`}>{clinic.benefits ? "Benefits" : "Self-pay"}</span>
               </article>
             ))}
           </div>
         </section>
       </div>
+
+      {showBookingModal && (
+        <div className="overlay-backdrop" onClick={() => setShowBookingModal(false)}>
+          <div className="card-surface contained modal-anim" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px", width: "95%" }}>
+            <h3>Book at {selectedClinic?.name}</h3>
+            <p className="page-section-lead">Select a preferred date and time. We'll sync this with your Google Calendar.</p>
+            <form style={{ marginTop: "1.5rem", display: "grid", gap: "1rem" }} onSubmit={async (e) => {
+              e.preventDefault();
+              setIsBookingLoading(true);
+              setBookingMsg("");
+              try {
+                const res = await apiFetch("/api/appointments/", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId: user?.uid || "guest",
+                    userEmail: user?.email || "demo@example.com",
+                    userName: user?.fullName || "Patient",
+                    clinicName: selectedClinic.name,
+                    type: selectedClinic.type || "Appointment",
+                    date: `${apptDate}T${apptTime}:00`,
+                    duration: 45
+                  })
+
+                });
+                const data = await res.json();
+                if (data.success) {
+                  setBookingMsg("✅ Appointment booked! Check your calendar.");
+                  setTimeout(() => { setShowBookingModal(false); setBookingMsg(""); }, 2500);
+                } else {
+                  setBookingMsg(`⚠️ Booking failed: ${data.detail || "Error"}`);
+                }
+              } catch {
+                setBookingMsg("⚠️ Server error. Is the backend running?");
+              } finally {
+                setIsBookingLoading(false);
+              }
+            }}>
+              <label className="form-field">Date <input type="date" required value={apptDate} onChange={e => setApptDate(e.target.value)} min={new Date().toISOString().split("T")[0]} /></label>
+              <label className="form-field">Time <input type="time" required value={apptTime} onChange={e => setApptTime(e.target.value)} /></label>
+              {bookingMsg && <p style={{ textAlign: "center", fontSize: "0.9rem" }}>{bookingMsg}</p>}
+              <div className="button-row" style={{ marginTop: "1rem" }}>
+                <button className="secondary-btn" type="button" onClick={() => setShowBookingModal(false)}>Cancel</button>
+                <button className="primary-btn" type="submit" disabled={isBookingLoading}>{isBookingLoading ? "Booking..." : "Confirm Booking"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

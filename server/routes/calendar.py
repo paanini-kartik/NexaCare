@@ -14,7 +14,10 @@ Requires in .env:
 """
 
 import os
+import os; os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")  # allow HTTP on localhost
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -108,12 +111,22 @@ def get_auth_url(user_email: str = Query(...)):
     if not _configured():
         raise HTTPException(status_code=503, detail="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set in .env yet")
     try:
+        import urllib.parse
         flow = _make_flow()
         auth_url, _ = flow.authorization_url(
             access_type="offline",
             prompt="consent",
-            state=user_email,
         )
+        # Encode user_email + code_verifier in state so callback can use it
+        code_verifier = getattr(flow, "code_verifier", None) or ""
+        state_payload = urllib.parse.quote(f"{user_email}|||{code_verifier}")
+        # Rebuild auth_url with our custom state
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+        parsed = urlparse(auth_url)
+        params = parse_qs(parsed.query)
+        params["state"] = [state_payload]
+        new_query = urlencode({k: v[0] for k, v in params.items()})
+        auth_url = urlunparse(parsed._replace(query=new_query))
         return {"url": auth_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -132,11 +145,20 @@ def oauth_callback(
     if not code or not state:
         return RedirectResponse(f"{FRONTEND_URL}/settings?calendar=error&reason=missing_params")
 
-    user_email = state
+    import urllib.parse
+    decoded_state = urllib.parse.unquote(state)
+    if "|||" in decoded_state:
+        user_email, code_verifier = decoded_state.split("|||", 1)
+    else:
+        user_email = decoded_state
+        code_verifier = None
 
     try:
         flow = _make_flow()
-        flow.fetch_token(code=code)
+        fetch_kwargs = {"code": code}
+        if code_verifier:
+            fetch_kwargs["code_verifier"] = code_verifier
+        flow.fetch_token(**fetch_kwargs)
         creds = flow.credentials
 
         _save_tokens(user_email, {
@@ -174,20 +196,38 @@ def add_calendar_event(body: dict):
     if not creds:
         return {"success": False, "reason": "User has not connected Google Calendar"}
 
-    # Parse ISO 8601 start time safely
+    # Parse ISO 8601 start time and localize to America/Toronto
+    tz = ZoneInfo("America/Toronto")
     try:
-        start_dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-    except Exception:
+        print(f"DEBUG: Received date_str='{date_str}'")
+        parsed = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        
+        # If naive, treat as local Toronto time (-04:00)
+        if parsed.tzinfo is None:
+            local_dt = parsed.replace(tzinfo=tz)
+        else:
+            local_dt = parsed.astimezone(tz)
+        
+        # Shift to UTC for absolute safety
+        start_dt = local_dt.astimezone(timezone.utc)
+        print(f"DEBUG: Localized={local_dt.isoformat()}, UTC={start_dt.isoformat()}")
+    except Exception as e:
+        print(f"⚠️  Datetime parsing failed: {e}. Falling back to 1 week from now.")
         start_dt = datetime.now(timezone.utc) + timedelta(days=7)
 
     end_dt = start_dt + timedelta(minutes=duration)
+
+    # Format explicitly as UTC Zulu time
+    start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_iso   = end_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     event = {
         "summary":     f"🏥 {appt_type}",
         "location":    clinic_name,
         "description": f"Booked via NexaCare\nClinic: {clinic_name}\nDuration: {duration} minutes",
-        "start": {"dateTime": start_dt.isoformat(), "timeZone": "America/Toronto"},
-        "end":   {"dateTime": end_dt.isoformat(),   "timeZone": "America/Toronto"},
+        "start": {"dateTime": start_iso},
+        "end":   {"dateTime": end_iso},
+
         "reminders": {
             "useDefault": False,
             "overrides": [
