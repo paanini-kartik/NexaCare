@@ -2188,6 +2188,29 @@ th { color: #334155; font-family: "General Sans", Inter, sans-serif; }
   cursor: not-allowed;
 }
 
+.chat-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.chat-upload-btn:hover {
+  background: var(--surface-2, #f1f5f9);
+  color: var(--primary);
+}
+.chat-upload-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .overlay-root { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: grid; place-items: center; z-index: 60; padding: 1rem; }
 .overlay-card { width: min(680px, 100%); padding: 1.35rem; box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2); }
 .overlay-head { display: flex; justify-content: space-between; align-items: center; }

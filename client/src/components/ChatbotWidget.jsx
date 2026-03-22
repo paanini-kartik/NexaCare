@@ -1,4 +1,4 @@
-import { Maximize2, MessageCircle, Minimize2, X } from "lucide-react";
+import { Maximize2, MessageCircle, Minimize2, Paperclip, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -810,6 +810,143 @@ export default function ChatbotWidget({
 
   const onSubmit = (e) => { e.preventDefault(); sendMessage(input.trim()); };
 
+  // ── PDF text extraction via pdfjs-dist ──────────────────────────────────
+  async function extractPdfText(file) {
+    const pdfjsLib = await import("pdfjs-dist");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+      "pdfjs-dist/build/pdf.worker.mjs",
+      import.meta.url
+    ).toString();
+    const buffer    = await file.arrayBuffer();
+    const pdf       = await pdfjsLib.getDocument({ data: buffer }).promise;
+    const pages     = await Promise.all(
+      Array.from({ length: pdf.numPages }, (_, i) =>
+        pdf.getPage(i + 1).then((p) => p.getTextContent()).then((tc) =>
+          tc.items.map((it) => it.str).join(" ")
+        )
+      )
+    );
+    return pages.join("\n");
+  }
+
+  // ── File upload handler ─────────────────────────────────────────────────
+  const fileInputRef = useRef(null);
+
+  async function handleFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";   // reset so same file can be re-uploaded
+
+    const isPdf   = file.type === "application/pdf";
+    const isImage = file.type.startsWith("image/");
+    if (!isPdf && !isImage) {
+      setMessages((prev) => [...prev, { from: "bot", text: "⚠️ Please upload an image (JPG, PNG) or a PDF." }]);
+      return;
+    }
+
+    // Show user message with file name
+    setMessages((prev) => [...prev, { from: "user", text: `📎 ${file.name}`, isFile: true }]);
+    setLoading(true);
+
+    try {
+      let userContent;
+
+      if (isPdf) {
+        // ── PDF: extract text → send as insurance parser prompt ──────────
+        const pdfText = await extractPdfText(file);
+        const parserPrompt = `The user has uploaded an insurance/benefits document. Extract all benefit information from it.
+
+Document text:
+"""
+${pdfText.slice(0, 8000)}
+"""
+
+Instructions:
+1. Identify the provider name, plan name, and all coverage categories (dental, vision, physio/physical, drug, mental health, etc.)
+2. For each category extract: annualLimit (dollars), coverage fraction (0–1, e.g. 80% = 0.8)
+3. Call add_benefit_provider with the extracted data to add it to the user's dashboard
+4. Then summarize what you found in 2-3 sentences
+
+If this is NOT an insurance document, say so clearly and don't call any tools.`;
+
+        userContent = parserPrompt;
+
+      } else {
+        // ── Image: base64 encode → send as vision block ──────────────────
+        const base64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.split(",")[1]);
+          reader.readAsDataURL(file);
+        });
+
+        const benefitContext = benefits?.hasAny
+          ? `User's benefit balances — Dental: $${benefits.dental.total - benefits.dental.used} remaining, Vision: $${benefits.vision.total - benefits.vision.used} remaining, Physio: $${benefits.physio.total - benefits.physio.used} remaining.`
+          : "User has no benefit plans configured yet.";
+
+        userContent = [
+          {
+            type: "image",
+            source: { type: "base64", media_type: file.type, data: base64 },
+          },
+          {
+            type: "text",
+            text: `The user has sent a photo. Analyze it as a health assistant.
+
+${benefitContext}
+
+Instructions:
+1. Describe what you observe in 1 sentence (injury, symptom, skin condition, document, etc.)
+2. Assess urgency: low / medium / high
+3. Recommend the most appropriate service type (e.g. physiotherapy, dentist, optometrist, GP, ER)
+4. Based on their benefit balances above, tell them which service is best covered
+5. Offer to book an appointment if relevant
+6. Keep the whole response under 4 sentences — friendly, not clinical`,
+          },
+        ];
+      }
+
+      // Build history entry and call API
+      const currentHistory = [
+        ...history,
+        { role: "user", content: userContent },
+      ];
+
+      let data = await callAPI(currentHistory);
+
+      // Tool use loop (e.g. add_benefit_provider from PDF parsing)
+      let loopHistory = currentHistory;
+      while (data.stop_reason === "tool_use") {
+        const toolUseBlocks = data.content.filter((b) => b.type === "tool_use");
+        loopHistory = [...loopHistory, { role: "assistant", content: data.content }];
+        const toolResults = await Promise.all(
+          toolUseBlocks.map(async (block) => ({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: await executeTool(block.name, block.input),
+          }))
+        );
+        loopHistory = [...loopHistory, { role: "user", content: toolResults }];
+        data = await callAPI(loopHistory);
+      }
+
+      const reply = data.content.find((b) => b.type === "text")?.text ?? "Done!";
+      setHistory([...loopHistory, { role: "assistant", content: reply }]);
+
+      const actions = getContextActions(reply, file.name);
+      setMessages((prev) => [
+        ...prev,
+        { from: "bot", text: reply },
+        ...(actions.length ? [{ from: "actions", actions }] : []),
+      ]);
+
+    } catch (err) {
+      console.error("File upload error:", err);
+      setMessages((prev) => [...prev, { from: "bot", text: `⚠️ ${err.message}` }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className={`chatbot-mini${expanded ? " chatbot-expanded" : ""}`}>
       <button className="chat-fab" type="button" aria-label="Open assistant"
@@ -856,6 +993,10 @@ export default function ChatbotWidget({
                       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                         {m.text}
                       </ReactMarkdown>
+                    ) : m.isFile ? (
+                      <span style={{ display: "flex", alignItems: "center", gap: "6px", opacity: 0.85 }}>
+                        <Paperclip size={13} /> {m.text.replace("📎 ", "")}
+                      </span>
                     ) : m.text}
                   </div>
                 );
@@ -881,8 +1022,24 @@ export default function ChatbotWidget({
             </div>
 
             <form onSubmit={onSubmit} className="chat-form">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                style={{ display: "none" }}
+                onChange={handleFileUpload}
+              />
+              <button
+                type="button"
+                className="chat-upload-btn"
+                aria-label="Upload image or PDF"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+              >
+                <Paperclip size={16} />
+              </button>
               <input value={input} onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask a question…" aria-label="Message" disabled={loading} />
+                placeholder="Ask a question or upload a photo / PDF…" aria-label="Message" disabled={loading} />
               <button className="chat-send-btn" type="submit" disabled={loading || !input.trim()}>
                 Send
               </button>
