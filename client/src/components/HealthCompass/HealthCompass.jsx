@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import { Clock, MapPin, Phone, Globe, Star } from "lucide-react";
 import { clinicLocations } from "../../data/mockData";
 
+const userIcon = new L.Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
 const FILTERS = [
-  { id: "all", label: "All" },
   { id: "dental", label: "Dental" },
   { id: "vision", label: "Vision" },
   { id: "pharmacy", label: "Pharmacy" },
@@ -62,23 +72,49 @@ function MapViewportController({ clinics, selectedClinic }) {
 }
 
 export default function HealthCompass() {
-  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState("dental");
   const [query, setQuery] = useState("");
   const [selectedClinicId, setSelectedClinicId] = useState(null);
-  const [clinicsSource, setClinicsSource] = useState(clinicLocations);
+  const [clinicsSource, setClinicsSource] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState("");
+  const [clinicDetails, setClinicDetails] = useState(null);
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationError, setLocationError] = useState(null);
 
   useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser.");
+      setUserLocation({ lat: 43.6532, lng: -79.3832 });
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+      },
+      (error) => {
+        console.warn("Geolocation error:", error);
+        setLocationError("Please enable location services or using default location.");
+        setUserLocation({ lat: 43.6532, lng: -79.3832 }); // fallback
+      },
+      { timeout: 10000 }
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!userLocation) return;
     let isCancelled = false;
 
     async function loadClinics() {
       setIsLoading(true);
       setLoadMessage("");
+      setClinicsSource([]);
 
       try {
         const apiType = activeFilter === "vision" ? "optometry" : activeFilter;
-        const response = await fetch(`/api/clinics/?lat=43.6532&lng=-79.3832&type=${apiType}`);
+        const response = await fetch(`/api/clinics/?lat=${userLocation.lat}&lng=${userLocation.lng}&type=${apiType}`);
         if (!response.ok) {
           throw new Error(`Clinics API returned ${response.status}`);
         }
@@ -117,7 +153,7 @@ export default function HealthCompass() {
     return () => {
       isCancelled = true;
     };
-  }, [activeFilter]);
+  }, [activeFilter, userLocation]);
 
   const normalizedClinics = useMemo(
     () =>
@@ -154,6 +190,33 @@ export default function HealthCompass() {
     [filteredClinics, selectedClinicId]
   );
 
+  useEffect(() => {
+    if (!selectedClinicId) {
+      setClinicDetails(null);
+      return;
+    }
+
+    let isCancelled = false;
+    async function fetchDetails() {
+      setIsDetailsLoading(true);
+      try {
+        const response = await fetch(`/api/clinics/${selectedClinicId}`);
+        if (!response.ok) throw new Error("Details fetch failed");
+        const data = await response.json();
+        if (!isCancelled) {
+          setClinicDetails(Object.keys(data).length > 0 ? data : null);
+        }
+      } catch (e) {
+        if (!isCancelled) setClinicDetails(null);
+      } finally {
+        if (!isCancelled) setIsDetailsLoading(false);
+      }
+    }
+
+    fetchDetails();
+    return () => { isCancelled = true; };
+  }, [selectedClinicId]);
+
   return (
     <div className="health-compass-root">
       <div className="health-compass-toolbar">
@@ -181,14 +244,34 @@ export default function HealthCompass() {
         <section className="card-surface health-compass-map">
           <h3>Health Compass Map</h3>
           <p>Tap a pin to view details and sync with the clinic panel.</p>
-          {isLoading ? <p>Loading clinics...</p> : <p>{loadMessage}</p>}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {isLoading ? (
+              <p>Loading {activeFilter === "pharmacy" ? "pharmacies" : activeFilter === "hospital" ? "hospitals" : activeFilter === "dental" ? "dental clinics" : activeFilter === "vision" ? "vision centers" : "locations"}...</p>
+            ) : (
+              <p>{loadMessage}</p>
+            )}
+            {locationError && <p style={{ color: "#ef4444", fontSize: "0.85rem", margin: 0 }}>📍 {locationError}</p>}
+          </div>
+          
           <div className="map-frame-wrap health-compass-map-live">
-            <MapContainer center={[43.6532, -79.3832]} zoom={13} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapViewportController clinics={filteredClinics} selectedClinic={selectedClinic} />
+            {!userLocation ? (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%", background: "#f1f5f9", borderRadius: "12px" }}>
+                <p style={{ color: "#64748b", fontWeight: "500" }}>Finding your location...</p>
+              </div>
+            ) : (
+              <MapContainer center={[userLocation.lat, userLocation.lng]} zoom={13} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapViewportController clinics={filteredClinics} selectedClinic={selectedClinic} />
+                
+                <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
+                  <Popup>
+                  <strong>You are here</strong>
+                </Popup>
+              </Marker>
+
               {filteredClinics.map((clinic) => {
                 const isSelected = clinic.id === selectedClinicId;
                 return (
@@ -217,7 +300,86 @@ export default function HealthCompass() {
                 );
               })}
             </MapContainer>
+            )}
           </div>
+
+          {selectedClinic ? (
+            <article className="health-compass-selected" style={{ marginTop: "1.5rem" }}>
+              <h4>{selectedClinic.name}</h4>
+              <p style={{ textTransform: "capitalize", color: "var(--text-secondary, #64748b)" }}>
+                {selectedClinic.type}
+              </p>
+              
+              {isDetailsLoading ? (
+                <div style={{ padding: "1rem 0", color: "#64748b", fontSize: "0.9rem" }}>Loading place details...</div>
+              ) : clinicDetails ? (
+                <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  {clinicDetails.editorial_summary?.overview && (
+                    <p style={{ fontStyle: "italic", fontSize: "0.95rem", lineHeight: "1.4" }}>
+                      "{clinicDetails.editorial_summary.overview}"
+                    </p>
+                  )}
+                  
+                  {clinicDetails.opening_hours?.weekday_text && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                      <Clock size={18} color="#64748b" style={{ marginTop: "2px" }} />
+                      <span style={{ fontSize: "0.95rem", color: "#64748b" }}>
+                        {clinicDetails.opening_hours.weekday_text[(new Date().getDay() + 6) % 7]}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {clinicDetails.formatted_address && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                      <MapPin size={18} color="#64748b" style={{ minWidth: "18px", marginTop: "2px" }} />
+                      <span style={{ fontSize: "0.95rem", color: "#334155" }}>{clinicDetails.formatted_address}</span>
+                    </div>
+                  )}
+                  
+                  {clinicDetails.formatted_phone_number && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <Phone size={18} color="#64748b" style={{ minWidth: "18px" }} />
+                      <a href={`tel:${clinicDetails.formatted_phone_number.replace(/\D/g,'')}`} style={{ fontSize: "0.95rem", color: "#2563eb", textDecoration: "none", fontWeight: "500" }}>
+                        {clinicDetails.formatted_phone_number}
+                      </a>
+                    </div>
+                  )}
+                  
+                  {clinicDetails.website && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <Globe size={18} color="#64748b" style={{ minWidth: "18px" }} />
+                      <a href={clinicDetails.website} target="_blank" rel="noreferrer" style={{ fontSize: "0.95rem", color: "#2563eb", textDecoration: "none", fontWeight: "500" }}>
+                        Visit Website
+                      </a>
+                    </div>
+                  )}
+                  
+                  {(clinicDetails.rating) && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+                      <Star size={18} color="#eab308" fill="#eab308" style={{ minWidth: "18px" }} />
+                      <span style={{ color: "#334155", fontWeight: "600" }}>{clinicDetails.rating}</span>
+                      <span style={{ color: "#64748b", fontSize: "0.85rem" }}>({clinicDetails.user_ratings_total} reviews)</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: "1rem" }}>
+                   <p style={{ color: "#64748b", fontSize: "0.9rem" }}>No extended details available for this location.</p>
+                </div>
+              )}
+
+              <div style={{ marginTop: "1.5rem", borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
+                <span className={`pill ${selectedClinic.benefits ? "ok" : "plain"}`}>
+                  {selectedClinic.benefits ? "Accepts NexaCare Benefits" : "Self-pay / Out of network"}
+                </span>
+                {selectedClinic.acceptedBenefits?.length > 0 && (
+                  <p style={{ fontSize: "0.85rem", color: "#64748b", marginTop: "0.5rem" }}>
+                    Eligible for: <span style={{ textTransform: "capitalize" }}>{selectedClinic.acceptedBenefits.join(", ")}</span>
+                  </p>
+                )}
+              </div>
+            </article>
+          ) : null}
         </section>
 
         <section className="card-surface health-compass-side">
@@ -239,32 +401,12 @@ export default function HealthCompass() {
               >
                 <div>
                   <strong>{clinic.name}</strong>
-                  <p>{clinic.type}</p>
+                  <p style={{ textTransform: "capitalize" }}>{clinic.type}</p>
                 </div>
                 <span className={`pill ${clinic.benefits ? "ok" : "plain"}`}>{clinic.benefits ? "Benefits" : "Self-pay"}</span>
               </article>
             ))}
           </div>
-
-          {selectedClinic ? (
-            <article className="health-compass-selected">
-              <h4>{selectedClinic.name}</h4>
-              <p>{selectedClinic.type}</p>
-              <p>
-                Coordinates: {selectedClinic.lat}, {selectedClinic.lng}
-              </p>
-              {selectedClinic.acceptedBenefits?.length ? (
-                <p>Accepted: {selectedClinic.acceptedBenefits.join(", ")}</p>
-              ) : (
-                <p>No accepted benefits listed.</p>
-              )}
-              <span className={`pill ${selectedClinic.benefits ? "ok" : "plain"}`}>
-                {selectedClinic.benefits ? "Accepts benefits" : "No benefits listed"}
-              </span>
-            </article>
-          ) : (
-            <p>No clinics match your filter.</p>
-          )}
         </section>
       </div>
     </div>

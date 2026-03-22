@@ -4,3 +4,4 @@ __pycache__/
 .DS_Store
 serviceAccountKey.json
 .env.*
+ai/node_modules/

@@ -11,6 +11,8 @@ from fastapi import FastAPI
 
 from routes import clinics
 
+# Load from root NexaCare/.env first, then fall back to server/.env
+load_dotenv(Path(__file__).parent.parent / ".env")
 load_dotenv()
 
 app = FastAPI(title="NexaCare API", version="1.0.0")
