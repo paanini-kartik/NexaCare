@@ -4,13 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
-
-const MOCK_USER = {
-  name: "Nicolas Miranda Cantanhede",
-  age: 34,
-  occupation: "Software Developer",
-  location: { lat: 43.6532, lng: -79.3832, city: "Toronto" },
-};
+import { useAuth } from "../contexts/AuthContext";
 
 const TOOLS = [
   {
@@ -200,6 +194,35 @@ export default function ChatbotWidget({
   onUpdateBenefit,
   onShowNotification,
 }) {
+  const { user: authUser, benefitDashboardSummary } = useAuth();
+
+  // Build real user object from auth context
+  const realUser = {
+    name: authUser?.fullName || authUser?.name || authUser?.displayName || "there",
+    age: authUser?.age ?? null,
+    occupation: authUser?.occupation ?? "patient",
+    email: authUser?.email ?? "",
+    location: { city: "Toronto" },
+  };
+
+  // Map real benefit data from auth context
+  const realBenefits = (() => {
+    if (propBenefits) return propBenefits;
+    if (benefitDashboardSummary?.categories) {
+      const cats = benefitDashboardSummary.categories;
+      const find = (key) => cats.find((c) => c.key === key || c.label?.toLowerCase().includes(key));
+      const dental = find("dental");
+      const vision = find("vision");
+      const physio = find("physio") || find("physiotherapy");
+      return {
+        dental: { total: dental?.total ?? 0, used: dental?.used ?? 0 },
+        vision: { total: vision?.total ?? 0, used: vision?.used ?? 0 },
+        physio: { total: physio?.total ?? 0, used: physio?.used ?? 0 },
+      };
+    }
+    return null;
+  })();
+
   const appointments = propAppointments ?? [
     { id: "apt_01", type: "Annual Dental Checkup",  clinicName: "Smile Dental Studio",    date: "2026-04-02T10:00:00Z", duration: 60,  status: "upcoming" },
     { id: "apt_02", type: "Physiotherapy Session",  clinicName: "ActiveCare Physio",       date: "2026-04-10T14:30:00Z", duration: 45,  status: "upcoming" },
@@ -209,7 +232,7 @@ export default function ChatbotWidget({
   ];
 
   const [benefits, setBenefits] = useState(
-    propBenefits ?? {
+    realBenefits ?? propBenefits ?? {
       dental: { total: 1500, used: 400 },
       vision: { total: 600, used: 0 },
       physio: { total: 900, used: 200 },
@@ -224,10 +247,11 @@ export default function ChatbotWidget({
     { id: "c_05", name: "Toronto General Hosp.", type: "hospital", lat: 43.659, lng: -79.387 },
   ];
 
+  const firstName = realUser.name.split(" ")[0];
   const [messages, setMessages] = useState([
     {
       from: "bot",
-      text: `Hi Nicolas! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
+      text: `Hi ${firstName}! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
     },
   ]);
   const [history,  setHistory]  = useState([]);
@@ -244,7 +268,7 @@ export default function ChatbotWidget({
   async function executeTool(name, toolInput) {
     switch (name) {
       case "get_user_profile":
-        return JSON.stringify(MOCK_USER);
+        return JSON.stringify(realUser);
 
       case "get_benefits":
         return JSON.stringify(benefits);
@@ -265,9 +289,9 @@ export default function ChatbotWidget({
           date: toolInput.date,
           duration: toolInput.duration,
           status: "upcoming",
-          userId: "user_demo_01",
-          userName: "Nicolas Miranda Cantanhede",
-          userEmail: "nicolasmcantanhede@gmail.com",
+          userId: authUser?.id ?? authUser?.email ?? "user_demo_01",
+          userName: realUser.name,
+          userEmail: realUser.email,
         };
 
         // Hit real backend — saves to Firebase + fires Resend emails
@@ -343,7 +367,7 @@ export default function ChatbotWidget({
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1024,
-        system: buildSystemPrompt(MOCK_USER, benefits, appointments),
+        system: buildSystemPrompt(realUser, benefits, appointments),
         tools: TOOLS,
         messages: apiMessages,
       }),
