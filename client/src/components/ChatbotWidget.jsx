@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import remarkGfm from "remark-gfm";
 import { useNavigate } from "react-router-dom";
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { useAuth } from "../contexts/AuthContext";
 
 const TOOLS = [
@@ -1000,10 +1001,7 @@ export default function ChatbotWidget({
   // ── PDF text extraction via pdfjs-dist ──────────────────────────────────
   async function extractPdfText(file) {
     const pdfjsLib = await import("pdfjs-dist");
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      "pdfjs-dist/build/pdf.worker.mjs",
-      import.meta.url
-    ).toString();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
     const buffer    = await file.arrayBuffer();
     const pdf       = await pdfjsLib.getDocument({ data: buffer }).promise;
     const pages     = await Promise.all(

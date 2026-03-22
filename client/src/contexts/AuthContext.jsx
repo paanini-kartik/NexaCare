@@ -320,6 +320,66 @@ function mergeHealthProfileFromAuthLoad(rawServer, prev) {
   });
 }
 
+/**
+ * After logout, `prev` is a normalized "empty" profile (age "", empty arrays, etc.). Spreading that
+ * over the server doc in mergeHealthProfileFromAuthLoad would **wipe** every field saved in Firebase.
+ * Only merge local-over-remote when the user has actually entered something this session.
+ */
+function isHealthProfileBlankish(p) {
+  const n = normalizeProfile(p || {});
+  if (String(n.age ?? "").trim()) return false;
+  if (String(n.occupation ?? "").trim()) return false;
+  if (n.medicalHistory.length) return false;
+  if (n.allergies.length) return false;
+  if (n.favoriteClinics.length) return false;
+  if (n.extraCareServices.length) return false;
+  if (n.dashboardOnboardingDismissed) return false;
+  if (n.onboardingCalendarConnected) return false;
+  for (const row of Object.values(n.checkupSchedule || {})) {
+    if (row && row.lastVisitISO) return false;
+  }
+  return true;
+}
+
+function healthProfileForFirestoreSave(profile) {
+  try {
+    return JSON.parse(JSON.stringify(normalizeProfile(profile)));
+  } catch {
+    return normalizeProfile(profile);
+  }
+}
+
+/**
+ * Use the live Auth user for Firestore writes. `firebaseUid` React state can still be null briefly
+ * right after sign-in while `onAuthStateChanged` is mid-flight — skipping saves made profile look
+ * "not persistent" across logins.
+ */
+function getUidForFirestoreWrite() {
+  return getFirebaseAuth()?.currentUser?.uid ?? null;
+}
+
+/** localStorage-only: separate health profile per login email (legacy single key used as fallback). */
+function localHealthProfileStorageKey(email) {
+  return `${PROFILE_KEY}:${normEmail(email)}`;
+}
+
+function readLocalHealthProfile(user) {
+  if (!user?.email) return normalizeProfile({});
+  const keyed = localHealthProfileStorageKey(user.email);
+  let raw = readStorage(keyed, null);
+  if (raw == null) {
+    raw = readStorage(PROFILE_KEY, {});
+    if (raw && typeof raw === "object" && Object.keys(raw).length) {
+      try {
+        localStorage.setItem(keyed, JSON.stringify(raw));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return normalizeProfile(raw || {});
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => (USE_FIREBASE ? null : migrateLegacyUser(readStorage(USER_KEY, null))));
   const [firebaseUid, setFirebaseUid] = useState(null);
@@ -332,9 +392,15 @@ export function AuthProvider({ children }) {
   );
   const [sessionMeta, setSessionMeta] = useState(() => (USE_FIREBASE ? emptySessionMeta() : loadSessionMeta()));
   const [healthProfile, setHealthProfile] = useState(() =>
-    USE_FIREBASE ? normalizeProfile({}) : normalizeProfile(readStorage(PROFILE_KEY, {}))
+    USE_FIREBASE ? normalizeProfile({}) : readLocalHealthProfile(migrateLegacyUser(readStorage(USER_KEY, null)))
   );
   const [showOnboardingOverlay, setShowOnboardingOverlay] = useState(false);
+
+  /** Local mode: load the correct account's profile when switching users. */
+  useEffect(() => {
+    if (USE_FIREBASE) return;
+    setHealthProfile(readLocalHealthProfile(user));
+  }, [user?.email]);
 
   useEffect(() => {
     if (!USE_FIREBASE) {
@@ -372,7 +438,13 @@ export function AuthProvider({ children }) {
           email: firebaseUser.email || data.profile?.email,
         });
         setUser(mergedProfile);
-        setHealthProfile((prev) => mergeHealthProfileFromAuthLoad(data.healthProfile, prev));
+        setHealthProfile((prev) => {
+          const serverRaw = data.healthProfile || {};
+          if (isHealthProfileBlankish(prev)) {
+            return normalizeProfile(serverRaw);
+          }
+          return mergeHealthProfileFromAuthLoad(serverRaw, prev);
+        });
         setHouseholdState(
           data.household && typeof data.household === "object"
             ? {
@@ -708,15 +780,18 @@ export function AuthProvider({ children }) {
         if (!USE_FIREBASE) {
           localStorage.setItem(USER_KEY, JSON.stringify(next));
           saveUserToRegistry(next);
-        } else if (firebaseUid) {
-          void saveUserDocument(firebaseUid, { profile: stripUid(next) }).catch((e) => {
-            console.warn("NexaCare: failed to save profile", e);
-          });
+        } else {
+          const uid = getUidForFirestoreWrite();
+          if (uid) {
+            void saveUserDocument(uid, { profile: stripUid(next) }).catch((e) => {
+              console.warn("NexaCare: failed to save profile", e);
+            });
+          }
         }
         return next;
       });
     },
-    [firebaseUid]
+    []
   );
 
   const createFamilyGroup = useCallback(() => {
@@ -1267,16 +1342,36 @@ export function AuthProvider({ children }) {
         const patch = typeof updates === "function" ? updates(prev) : updates;
         const next = normalizeProfile({ ...prev, ...patch });
         if (!USE_FIREBASE) {
-          localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
-        } else if (firebaseUid) {
-          void saveUserDocument(firebaseUid, { healthProfile: next }).catch((e) => {
-            console.warn("NexaCare: failed to save health profile", e);
-          });
+          const em = normEmail(user?.email || "");
+          try {
+            if (em) {
+              localStorage.setItem(localHealthProfileStorageKey(user.email), JSON.stringify(next));
+            } else {
+              localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+            }
+          } catch {
+            /* ignore */
+          }
+        } else {
+          const uid = getUidForFirestoreWrite();
+          if (uid) {
+            const toSave = healthProfileForFirestoreSave(next);
+            void saveUserDocument(uid, { healthProfile: toSave }).catch((e) => {
+              console.error(
+                "NexaCare: Firestore rejected health profile save (check rules / network / invalid fields):",
+                e?.code || e?.message || e
+              );
+            });
+          } else {
+            console.warn(
+              "NexaCare: health profile updated in memory only — not signed in; sign in again to sync to the cloud."
+            );
+          }
         }
         return next;
       });
     },
-    [firebaseUid]
+    [user?.email]
   );
 
   const value = useMemo(
