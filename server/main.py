@@ -41,6 +41,11 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "NexaCare API"}
+
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
