@@ -1,24 +1,22 @@
 """
-NexaCare Python API — clinics proxy only.
+NexaCare Python API.
 
-User profiles, benefits, family/session meta, and auth are handled in the React app
-via Firebase Auth + Firestore (client SDK). This service keeps Google Places / Maps
-API keys off the browser and exposes `/api/clinics`.
+Handles clinics proxy (Google Maps) and appointment booking (Firebase + Resend emails).
+User profiles, benefits, auth handled client-side via Firebase SDK.
 """
 
 from pathlib import Path
-
 from dotenv import load_dotenv
-from fastapi import FastAPI
-from pathlib import Path
-from routes import clinics
 
 _server_dir = Path(__file__).resolve().parent
 _repo_root = _server_dir.parent
 
-# Repo-root `.env` (e.g. NexaCare/.env), then `server/.env` (overrides). CWD no longer matters for uvicorn.
+# Load env FIRST before any other imports read os.getenv()
 load_dotenv(_repo_root / ".env")
 load_dotenv(_server_dir / ".env", override=True)
+
+from fastapi import FastAPI
+from routes import clinics, appointments
 
 app = FastAPI(title="NexaCare API", version="1.0.0")
 
@@ -29,3 +27,4 @@ def health_check():
 
 
 app.include_router(clinics.router, prefix="/api/clinics")
+app.include_router(appointments.router, prefix="/api/appointments")
