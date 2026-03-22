@@ -1,4 +1,4 @@
-import { Clock, Maximize2, MessageCircle, Minimize2, Paperclip, Plus, X } from "lucide-react";
+import { Activity, AlertTriangle, Calendar, CheckCircle, Clock, Eye, Maximize2, MessageCircle, Minimize2, Paperclip, Pill, Plus, Stethoscope, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -298,6 +298,16 @@ Tools available:
 
 Use markdown tables when showing 3+ items. When booking, call update_benefit_usage + show_notification too.
 
+STRUCTURED RESPONSE TAGS — use these when relevant, they render as rich UI components:
+- After showing benefit balances: append <!--BENEFIT_CARD:{"dental":{"used":N,"total":N},"vision":{"used":N,"total":N},"physio":{"used":N,"total":N}}-->
+- After identifying urgency from a photo/symptom: append <!--URGENCY:low--> or <!--URGENCY:medium--> or <!--URGENCY:high-->
+- After showing clinic results: append <!--CLINIC_LIST:[{"name":"...","type":"...","id":"..."},...]--> (max 3 clinics)
+- After booking an appointment: append <!--APPT_CARD:{"type":"...","clinicName":"...","date":"...","duration":N}-->
+
+SMART ACTIONS — at the end of EVERY response, append exactly:
+<!--ACTIONS:[{"label":"short button label","message":"full message to send"},{"label":"...","message":"..."}]-->
+Include 2-3 actions that make sense as the obvious next steps given what you just said. Make them specific, not generic. Examples: if you just showed dental balance, offer to book a cleaning or find a dental clinic. If you just booked something, offer to view all appointments or add to calendar.
+
 Rules:
 - Keep answers to 2-3 sentences max
 - Be friendly and direct — not clinical
@@ -329,46 +339,142 @@ const markdownComponents = {
   },
 };
 
+// ── Rich response parser ─────────────────────────────────────────────────
+
+function parseRichReply(raw) {
+  // Extract all structured tags, leaving clean text
+  const tags = {};
+
+  const benefit = raw.match(/<!--BENEFIT_CARD:(.*?)-->/s);
+  if (benefit) { try { tags.benefitCard = JSON.parse(benefit[1]); } catch {} }
+
+  const urgency = raw.match(/<!--URGENCY:(low|medium|high)-->/);
+  if (urgency) tags.urgency = urgency[1];
+
+  const clinics = raw.match(/<!--CLINIC_LIST:(.*?)-->/s);
+  if (clinics) { try { tags.clinicList = JSON.parse(clinics[1]); } catch {} }
+
+  const appt = raw.match(/<!--APPT_CARD:(.*?)-->/s);
+  if (appt) { try { tags.apptCard = JSON.parse(appt[1]); } catch {} }
+
+  const actions = raw.match(/<!--ACTIONS:(.*?)-->/s);
+  if (actions) { try { tags.actions = JSON.parse(actions[1]); } catch {} }
+
+  // Clean text — remove all tags
+  const text = raw
+    .replace(/<!--BENEFIT_CARD:.*?-->/gs, "")
+    .replace(/<!--URGENCY:.*?-->/g, "")
+    .replace(/<!--CLINIC_LIST:.*?-->/gs, "")
+    .replace(/<!--APPT_CARD:.*?-->/gs, "")
+    .replace(/<!--ACTIONS:.*?-->/gs, "")
+    .trim();
+
+  return { text, ...tags };
+}
+
+// ── Rich UI components ───────────────────────────────────────────────────
+
+function UrgencyBadge({ level }) {
+  const cfg = {
+    low:    { label: "Low urgency",    color: "#16a34a", bg: "#dcfce7", Icon: CheckCircle },
+    medium: { label: "Medium urgency", color: "#d97706", bg: "#fef3c7", Icon: AlertTriangle },
+    high:   { label: "High urgency",   color: "#dc2626", bg: "#fee2e2", Icon: Zap },
+  }[level] ?? { label: level, color: "#6b7280", bg: "#f3f4f6", Icon: Activity };
+  const { Icon } = cfg;
+  return (
+    <span className="chat-urgency-badge" style={{ color: cfg.color, background: cfg.bg }}>
+      <Icon size={12} strokeWidth={2.5} /> {cfg.label}
+    </span>
+  );
+}
+
+function BenefitCard({ data }) {
+  const rows = [
+    { label: "Dental",  key: "dental",  Icon: Stethoscope },
+    { label: "Vision",  key: "vision",  Icon: Eye },
+    { label: "Physio",  key: "physio",  Icon: Activity },
+  ].filter((r) => data[r.key]?.total > 0);
+  if (!rows.length) return null;
+  return (
+    <div className="chat-benefit-card">
+      {rows.map(({ label, key, Icon }) => {
+        const { used = 0, total = 0 } = data[key];
+        const pct = total > 0 ? Math.min((used / total) * 100, 100) : 0;
+        const remaining = total - used;
+        const color = pct > 80 ? "#dc2626" : pct > 50 ? "#d97706" : "#16a34a";
+        return (
+          <div key={key} className="chat-benefit-row">
+            <div className="chat-benefit-row-top">
+              <span style={{ display:"flex", alignItems:"center", gap:"5px" }}>
+                <Icon size={13} strokeWidth={1.75} style={{ color }} /> {label}
+              </span>
+              <span className="chat-benefit-nums">${remaining} left of ${total}</span>
+            </div>
+            <div className="chat-benefit-bar-bg">
+              <div className="chat-benefit-bar-fill" style={{ width: `${pct}%`, background: color }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ApptCard({ data }) {
+  const date = data.date ? new Date(data.date).toLocaleDateString("en-CA", {
+    weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+  }) : "TBD";
+  return (
+    <div className="chat-appt-card">
+      <div className="chat-appt-icon">
+        <Calendar size={20} strokeWidth={1.75} />
+      </div>
+      <div className="chat-appt-info">
+        <strong>{data.type}</strong>
+        <span>{data.clinicName}</span>
+        <span className="chat-appt-date">{date} · {data.duration} min</span>
+      </div>
+    </div>
+  );
+}
+
+function ClinicList({ clinics, onBook }) {
+  const typeIconMap = { dental: Stethoscope, optometry: Eye, hospital: Activity, pharmacy: Pill };
+  return (
+    <div className="chat-clinic-list">
+      {clinics.map((c) => {
+        const Icon = typeIconMap[c.type] ?? Stethoscope;
+        return (
+        <div key={c.id ?? c.name} className="chat-clinic-card">
+          <span className="chat-clinic-icon"><Icon size={16} strokeWidth={1.75} /></span>
+          <div className="chat-clinic-info">
+            <strong>{c.name}</strong>
+            <span className="chat-clinic-type">{c.type}</span>
+          </div>
+          <button className="chat-clinic-book-btn" type="button"
+            onClick={() => onBook(`Book me an appointment at ${c.name}`)}>
+            Book
+          </button>
+        </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function getContextActions(reply, userMsg) {
+  // Fallback used only when Claude doesn't emit <!--ACTIONS:...-->
   const r = reply.toLowerCase();
-  const u = userMsg.toLowerCase();
+  const u = (userMsg || "").toLowerCase();
   if (u.includes("book") || r.includes("booked") || r.includes("confirmed"))
-    return [
-      { label: "View all appointments", message: "Show all my appointments" },
-      { label: "Check my benefits", message: "How much coverage do I have left?" },
-    ];
+    return [{ label: "View appointments", message: "Show all my appointments" }, { label: "Check benefits", message: "How much coverage do I have left?" }];
   if (r.includes("dental") || u.includes("dental"))
-    return [
-      { label: "Book dental cleaning", message: "Book me a dental cleaning at Smile Dental Studio for April 5th, 45 minutes" },
-      { label: "Find dental clinics", message: "Find a dental clinic nearby" },
-      { label: "Check dental coverage", message: "How much dental coverage do I have left?" },
-    ];
+    return [{ label: "Book dental cleaning", message: "Book me a dental cleaning at Smile Dental Studio next week, 45 minutes" }, { label: "Find dental clinics", message: "Find dental clinics near me" }];
   if (r.includes("vision") || r.includes("eye") || u.includes("vision"))
-    return [
-      { label: "Book eye exam", message: "Book me a vision test at ClearView Optometry for April 10th, 45 minutes" },
-      { label: "Find optometry clinics", message: "Find an optometry clinic nearby" },
-      { label: "Check vision coverage", message: "How much vision coverage do I have?" },
-    ];
+    return [{ label: "Book eye exam", message: "Book me a vision test at ClearView Optometry next week, 45 minutes" }, { label: "Find optometry clinics", message: "Find optometry clinics near me" }];
   if (r.includes("physio") || u.includes("physio"))
-    return [
-      { label: "Book physio session", message: "Book me a physiotherapy session at ActiveCare Physio for April 12th, 45 minutes" },
-      { label: "Check physio coverage", message: "How much physiotherapy coverage do I have?" },
-    ];
-  if (r.includes("appointment") || u.includes("appointment"))
-    return [
-      { label: "Book new appointment", message: "Book me a dental cleaning at Smile Dental Studio for April 5th, 45 minutes" },
-      { label: "Check my benefits", message: "Show me all my benefit balances" },
-    ];
-  if (r.includes("benefit") || r.includes("coverage") || r.includes("remaining"))
-    return [
-      { label: "View appointments", message: "Show all my appointments" },
-      { label: "Find a clinic", message: "Find a clinic nearby" },
-      { label: "Book checkup", message: "Book me a general checkup" },
-    ];
-  return [
-    { label: "View benefits", message: "Show me all my benefit balances" },
-    { label: "View appointments", message: "Show all my appointments" },
-  ];
+    return [{ label: "Book physio session", message: "Book me a physiotherapy session next week" }, { label: "Check physio coverage", message: "How much physiotherapy coverage do I have?" }];
+  return [{ label: "View benefits", message: "Show me all my benefit balances" }, { label: "View appointments", message: "Show all my appointments" }];
 }
 
 const SUGGESTIONS = [
@@ -437,65 +543,73 @@ export default function ChatbotWidget({
 
   const firstName = realUser.name.split(" ")[0];
 
-  const STORAGE_KEY       = `nexacare:chat:${realUser.email || "guest"}`;
-  const HISTORY_INDEX_KEY = `nexacare:chat-index:${realUser.email || "guest"}`;
-  const MAX_SAVED_CHATS   = 20;
+  const MAX_SAVED_CHATS = 20;
 
   const welcomeMessage = {
     from: "bot",
     text: `Hi ${firstName}! I'm your NexaCare assistant. I can check your benefits, book appointments, and help you navigate your care. What do you need?`,
   };
 
-  // ── Load last session from localStorage ────────────────────────────────
-  const loadLastSession = () => {
-    try {
-      const index = JSON.parse(localStorage.getItem(HISTORY_INDEX_KEY) || "[]");
-      if (!index.length) return { messages: [welcomeMessage], history: [] };
-      const last = index[index.length - 1];
-      const saved = JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${last.id}`) || "null");
-      if (saved) return { messages: saved.messages, history: saved.apiHistory };
-    } catch {}
-    return { messages: [welcomeMessage], history: [] };
-  };
-
-  const lastSession = loadLastSession();
-  const [messages, setMessages] = useState(lastSession.messages);
-  const [history,  setHistory]  = useState(lastSession.history);
+  const [messages, setMessages] = useState([welcomeMessage]);
+  const [history,  setHistory]  = useState([]);
   const [input,    setInput]    = useState("");
   const [loading,  setLoading]  = useState(false);
   const [open,     setOpen]     = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
-  const [chatIndex, setChatIndex] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(HISTORY_INDEX_KEY) || "[]"); } catch { return []; }
-  });
+  const [chatIndex, setChatIndex] = useState([]);
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [isDragOver,  setIsDragOver]  = useState(false);
-  const currentChatIdRef = useRef(chatIndex.length ? chatIndex[chatIndex.length - 1]?.id : `chat-${Date.now()}`);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const currentChatIdRef = useRef(`chat-${Date.now()}`);
   const bottomRef = useRef(null);
+
+  // Keys depend on email — computed once email is available
+  const storageKey      = `nexacare:chat:${realUser.email || "guest"}`;
+  const historyIndexKey = `nexacare:chat-index:${realUser.email || "guest"}`;
+
+  // ── Load last session once email resolves ──────────────────────────────
+  useEffect(() => {
+    if (!realUser.email || historyLoaded) return;
+    setHistoryLoaded(true);
+    try {
+      const index = JSON.parse(localStorage.getItem(historyIndexKey) || "[]");
+      setChatIndex(index);
+      if (index.length) {
+        const last = index[index.length - 1];
+        currentChatIdRef.current = last.id;
+        const saved = JSON.parse(localStorage.getItem(`${storageKey}:${last.id}`) || "null");
+        if (saved?.messages?.length > 1) {
+          setMessages(saved.messages);
+          setHistory(saved.apiHistory ?? []);
+          return;
+        }
+      }
+    } catch {}
+    // No saved session — start fresh with new id
+    currentChatIdRef.current = `chat-${Date.now()}`;
+  }, [realUser.email]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, open]);
 
-  // ── Auto-save conversation on every message change ──────────────────────
+  // ── Auto-save on every message change ──────────────────────────────────
   useEffect(() => {
-    if (messages.length <= 1) return;
+    if (!realUser.email || messages.length <= 1) return;
     const id = currentChatIdRef.current;
     const preview = messages.find((m) => m.from === "user")?.text?.slice(0, 60) ?? "New conversation";
     const entry = { id, preview, date: new Date().toISOString() };
 
-    // Save full conversation
-    localStorage.setItem(`${STORAGE_KEY}:${id}`, JSON.stringify({
+    localStorage.setItem(`${storageKey}:${id}`, JSON.stringify({
       messages,
       apiHistory: history,
     }));
 
-    // Update index
     setChatIndex((prev) => {
       const filtered = prev.filter((c) => c.id !== id);
       const next = [...filtered, entry].slice(-MAX_SAVED_CHATS);
-      localStorage.setItem(HISTORY_INDEX_KEY, JSON.stringify(next));
+      localStorage.setItem(historyIndexKey, JSON.stringify(next));
       return next;
     });
   }, [messages]);
@@ -511,11 +625,11 @@ export default function ChatbotWidget({
   // ── Restore a past chat ─────────────────────────────────────────────────
   const restoreChat = (id) => {
     try {
-      const saved = JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${id}`) || "null");
+      const saved = JSON.parse(localStorage.getItem(`${storageKey}:${id}`) || "null");
       if (saved) {
         currentChatIdRef.current = id;
         setMessages(saved.messages);
-        setHistory(saved.apiHistory);
+        setHistory(saved.apiHistory ?? []);
         setShowHistoryDrawer(false);
       }
     } catch {}
@@ -524,10 +638,10 @@ export default function ChatbotWidget({
   // ── Delete a past chat ──────────────────────────────────────────────────
   const deleteChat = (id, e) => {
     e.stopPropagation();
-    localStorage.removeItem(`${STORAGE_KEY}:${id}`);
+    localStorage.removeItem(`${storageKey}:${id}`);
     setChatIndex((prev) => {
       const next = prev.filter((c) => c.id !== id);
-      localStorage.setItem(HISTORY_INDEX_KEY, JSON.stringify(next));
+      localStorage.setItem(historyIndexKey, JSON.stringify(next));
       return next;
     });
     if (currentChatIdRef.current === id) startNewChat();
@@ -870,15 +984,16 @@ export default function ChatbotWidget({
         data = await callAPI(currentHistory);
       }
 
-      const reply = data.content.find((b) => b.type === "text")?.text ?? "Done!";
-      currentHistory = [...currentHistory, { role: "assistant", content: reply }];
+      const rawReply = data.content.find((b) => b.type === "text")?.text ?? "Done!";
+      currentHistory = [...currentHistory, { role: "assistant", content: rawReply }];
       setHistory(currentHistory);
 
-      // Auto-generate contextual action buttons based on reply content
-      const actions = getContextActions(reply, text);
+      const parsed = parseRichReply(rawReply);
+      const actions = parsed.actions?.length ? parsed.actions : getContextActions(parsed.text, text);
+
       setMessages((prev) => [
         ...prev,
-        { from: "bot", text: reply },
+        { from: "bot", text: parsed.text, richData: parsed },
         ...(actions.length ? [{ from: "actions", actions }] : []),
       ]);
     } catch (err) {
@@ -1026,13 +1141,15 @@ Instructions:
         data = await callAPI(loopHistory);
       }
 
-      const reply = data.content.find((b) => b.type === "text")?.text ?? "Done!";
-      setHistory([...loopHistory, { role: "assistant", content: reply }]);
+      const rawReply = data.content.find((b) => b.type === "text")?.text ?? "Done!";
+      setHistory([...loopHistory, { role: "assistant", content: rawReply }]);
 
-      const actions = getContextActions(reply, file.name);
+      const parsed = parseRichReply(rawReply);
+      const actions = parsed.actions?.length ? parsed.actions : getContextActions(parsed.text, file.name);
+
       setMessages((prev) => [
         ...prev,
-        { from: "bot", text: reply },
+        { from: "bot", text: parsed.text, richData: parsed },
         ...(actions.length ? [{ from: "actions", actions }] : []),
       ]);
 
@@ -1154,11 +1271,21 @@ Instructions:
                   );
                 }
                 return (
-                  <div key={idx} className={`chat-message chat-message--${m.from}`}>
+                  <div key={idx} className={`chat-message chat-message--${m.from}${m.from === "bot" ? " chat-message--bot-rich" : ""}`}>
                     {m.from === "bot" ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                        {m.text}
-                      </ReactMarkdown>
+                      <>
+                        {m.richData?.urgency && <UrgencyBadge level={m.richData.urgency} />}
+                        {m.text && (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {m.text}
+                          </ReactMarkdown>
+                        )}
+                        {m.richData?.benefitCard && <BenefitCard data={m.richData.benefitCard} />}
+                        {m.richData?.apptCard && <ApptCard data={m.richData.apptCard} />}
+                        {m.richData?.clinicList?.length > 0 && (
+                          <ClinicList clinics={m.richData.clinicList} onBook={sendMessage} />
+                        )}
+                      </>
                     ) : m.isFile && m.isImage && m.imageDataUrl ? (
                       <div className="chat-image-bubble">
                         <img
