@@ -91,12 +91,12 @@ function buildSystemPrompt(user, benefits, appointments) {
   const upcoming = appointments.filter((a) => a.status === "upcoming");
   const past     = appointments.filter((a) => a.status === "past");
 
-  const benefitText = benefits
+  const benefitText = (benefits && benefits.hasAny)
     ? `Current benefits:
 - Dental: $${benefits.dental.used} used of $${benefits.dental.total} ($${benefits.dental.total - benefits.dental.used} remaining)
-- Vision: $${benefits.vision.used} used of $${benefits.vision.total} ($${benefits.vision.total - benefits.vision.used} remaining)
-- Physiotherapy: $${benefits.physio.used} used of $${benefits.physio.total} ($${benefits.physio.total - benefits.physio.used} remaining)`
-    : "Benefits: This user has not configured any benefit plans yet. Tell them to go to Settings > Benefits to add their coverage.";
+- Vision/Optometry: $${benefits.vision.used} used of $${benefits.vision.total} ($${benefits.vision.total - benefits.vision.used} remaining)
+- Physiotherapy/Physical: $${benefits.physio.used} used of $${benefits.physio.total} ($${benefits.physio.total - benefits.physio.used} remaining)`
+    : "Benefits: This user has not configured any benefit plans yet. Direct them to Settings > Benefits to add their coverage.";
 
   return `You are a personal health assistant for ${user.name}${user.age ? `, a ${user.age}-year-old` : ""}${user.occupation && user.occupation !== "patient" ? ` ${user.occupation}` : ""} based in ${user.location.city}.
 
