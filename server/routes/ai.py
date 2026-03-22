@@ -17,9 +17,9 @@ from fastapi import APIRouter, HTTPException
 
 router = APIRouter()
 
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_VERSION = "2023-06-01"
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+ANTHROPIC_API_URL = os.getenv("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages")
+ANTHROPIC_VERSION = os.getenv("ANTHROPIC_API_VERSION", "2023-06-01")
+DEFAULT_MODEL     = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 
 
 def _get_key() -> str:

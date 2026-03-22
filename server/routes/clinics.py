@@ -10,6 +10,11 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
+# Default map centre (used when the caller doesn't pass lat/lng).
+# Override with DEFAULT_LAT / DEFAULT_LNG in .env for non-Toronto deployments.
+_DEFAULT_LAT = float(os.getenv("DEFAULT_LAT", "43.6532"))
+_DEFAULT_LNG = float(os.getenv("DEFAULT_LNG", "-79.3832"))
+
 
 def _ssl_context() -> ssl.SSLContext:
     """
@@ -149,7 +154,7 @@ def fetch_google_clinics(lat: float, lng: float, clinic_type: str) -> list[dict[
 
 
 @router.get("/")
-def get_clinics(lat: float = 43.6532, lng: float = -79.3832, type: str = "all"):
+def get_clinics(lat: float = _DEFAULT_LAT, lng: float = _DEFAULT_LNG, type: str = "all"):
     try:
         google_clinics = fetch_google_clinics(lat=lat, lng=lng, clinic_type=type)
     except Exception as e:

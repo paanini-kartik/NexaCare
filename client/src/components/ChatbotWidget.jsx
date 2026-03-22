@@ -8,6 +8,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { apiUrl, apiFetch } from "../lib/api";
 import { getAppointmentStatus } from "../lib/appointments";
+import { DEFAULT_LOCATION } from "../config/defaults";
+import { clinicLocations as MOCK_CLINICS } from "../data/mockData";
 
 /** Format an ISO date string as a human-readable Toronto local time.
  *  e.g. "2026-03-30T18:00:00Z" → "Mon, Mar 30, 2026 at 2:00 PM"
@@ -487,9 +489,9 @@ function getContextActions(reply, userMsg) {
   if (u.includes("book") || r.includes("booked") || r.includes("confirmed"))
     return [{ label: "View appointments", message: "Show all my appointments" }, { label: "Check benefits", message: "How much coverage do I have left?" }];
   if (r.includes("dental") || u.includes("dental"))
-    return [{ label: "Book dental cleaning", message: "Book me a dental cleaning at Smile Dental Studio next week, 45 minutes" }, { label: "Find dental clinics", message: "Find dental clinics near me" }];
+    return [{ label: "Book dental cleaning", message: "Book me a dental cleaning at the nearest dental clinic next week, 45 minutes" }, { label: "Find dental clinics", message: "Find dental clinics near me" }];
   if (r.includes("vision") || r.includes("eye") || u.includes("vision"))
-    return [{ label: "Book eye exam", message: "Book me a vision test at ClearView Optometry next week, 45 minutes" }, { label: "Find optometry clinics", message: "Find optometry clinics near me" }];
+    return [{ label: "Book eye exam", message: "Book me a vision test at the nearest optometry clinic next week, 45 minutes" }, { label: "Find optometry clinics", message: "Find optometry clinics near me" }];
   if (r.includes("physio") || u.includes("physio"))
     return [{ label: "Book physio session", message: "Book me a physiotherapy session next week" }, { label: "Check physio coverage", message: "How much physiotherapy coverage do I have?" }];
   return [{ label: "View benefits", message: "Show me all my benefit balances" }, { label: "View appointments", message: "Show all my appointments" }];
@@ -528,9 +530,9 @@ export default function ChatbotWidget({
     occupation: healthProfile?.occupation ?? authUser?.occupation ?? "patient",
     email: authUser?.email ?? "",
     location: {
-      city: healthProfile?.location?.city ?? authUser?.location?.city ?? "Toronto",
-      lat: healthProfile?.location?.lat ?? authUser?.location?.lat ?? 43.6532,
-      lng: healthProfile?.location?.lng ?? authUser?.location?.lng ?? -79.3832,
+      city: healthProfile?.location?.city ?? authUser?.location?.city ?? DEFAULT_LOCATION.city,
+      lat: healthProfile?.location?.lat ?? authUser?.location?.lat ?? DEFAULT_LOCATION.lat,
+      lng: healthProfile?.location?.lng ?? authUser?.location?.lng ?? DEFAULT_LOCATION.lng,
     },
   };
 
@@ -633,13 +635,7 @@ export default function ChatbotWidget({
     ].join("\n\n");
   }
 
-  const clinics = propClinics ?? [
-    { id: "c_01", name: "Smile Dental Studio", type: "dental", lat: 43.6545, lng: -79.3801 },
-    { id: "c_02", name: "ClearView Optometry", type: "optometry", lat: 43.651, lng: -79.385 },
-    { id: "c_03", name: "ActiveCare Physio", type: "hospital", lat: 43.658, lng: -79.39 },
-    { id: "c_04", name: "Rexall Pharmacy", type: "pharmacy", lat: 43.649, lng: -79.382 },
-    { id: "c_05", name: "Toronto General Hosp.", type: "hospital", lat: 43.659, lng: -79.387 },
-  ];
+  const clinics = propClinics ?? MOCK_CLINICS;
 
   const firstName = realUser.name.split(" ")[0];
 
@@ -793,7 +789,7 @@ export default function ChatbotWidget({
           date: toolInput.date,
           duration: toolInput.duration,
           status: "upcoming",
-          userId: authUser?.uid || authUser?.email || "user_demo_01",
+          userId: authUser?.uid || authUser?.email || "",
           userEmail: authUser?.email || "",
           userName: realUser.name,
         };

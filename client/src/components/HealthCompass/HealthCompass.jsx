@@ -8,6 +8,7 @@ import { clinicLocations } from "../../data/mockData";
 import { apiFetch } from "../../lib/api";
 import { localDateAndTimeToIsoUtc } from "../../lib/datetime";
 import { useAuth } from "../../contexts/AuthContext";
+import { DEFAULT_LOCATION } from "../../config/defaults";
 
 
 const userIcon = new L.Icon({
@@ -140,7 +141,7 @@ export default function HealthCompass({ onBookingComplete }) {
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationError("Geolocation is not supported by your browser.");
-      setUserLocation({ lat: 43.6532, lng: -79.3832 });
+      setUserLocation(DEFAULT_LOCATION);
       return;
     }
 
@@ -151,7 +152,7 @@ export default function HealthCompass({ onBookingComplete }) {
       (error) => {
         console.warn("Geolocation error:", error);
         setLocationError("Please enable location services or using default location.");
-        setUserLocation({ lat: 43.6532, lng: -79.3832 }); // fallback
+        setUserLocation(DEFAULT_LOCATION); // fallback
       },
       { timeout: 10000 }
     );
