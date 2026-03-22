@@ -1,4 +1,6 @@
 import os
+import urllib.parse
+
 import resend
 from fastapi import APIRouter, HTTPException
 from firebase import db
@@ -84,9 +86,20 @@ def send_confirmation_emails(appt: dict):
 
 @router.get("/{user_id}")
 def get_appointments(user_id: str):
+    """
+    Return appointments for this account. Matches documents where `userId` OR `userEmail`
+    equals the path (URL-decoded), so lookups work whether the client passes Firebase uid
+    or email, and legacy rows still resolve.
+    """
     try:
-        appointments = db.collection("appointments").where("userId", "==", user_id).stream()
-        return [{**a.to_dict(), "id": a.id} for a in appointments]
+        decoded = urllib.parse.unquote(user_id)
+        seen: dict[str, dict] = {}
+        for doc in db.collection("appointments").where("userId", "==", decoded).stream():
+            seen[doc.id] = {**doc.to_dict(), "id": doc.id}
+        for doc in db.collection("appointments").where("userEmail", "==", decoded).stream():
+            if doc.id not in seen:
+                seen[doc.id] = {**doc.to_dict(), "id": doc.id}
+        return list(seen.values())
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

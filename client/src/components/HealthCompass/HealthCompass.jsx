@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -107,6 +108,7 @@ function MapResizeFix() {
 
 export default function HealthCompass() {
   const { user } = useAuth();
+  const { refreshAppointments } = useOutletContext() ?? {};
   const [activeFilter, setActiveFilter] = useState("dental");
 
   const [query, setQuery] = useState("");
@@ -366,7 +368,7 @@ export default function HealthCompass() {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    userId: user?.uid || "guest",
+                    userId: user?.uid || user?.email || "guest",
                     userEmail: user?.email || "demo@example.com",
                     userName: user?.fullName || "Patient",
                     clinicName: selectedClinic.name,
@@ -378,7 +380,10 @@ export default function HealthCompass() {
                 });
                 const data = await res.json();
                 if (data.success) {
-                  setBookingMsg("✅ Appointment booked! Check your calendar.");
+                  if (typeof refreshAppointments === "function") {
+                    void refreshAppointments();
+                  }
+                  setBookingMsg("✅ Appointment booked! It’ll show on your dashboard and in your calendar.");
                   setTimeout(() => { setShowBookingModal(false); setBookingMsg(""); }, 2500);
                 } else {
                   setBookingMsg(`⚠️ Booking failed: ${data.detail || "Error"}`);
