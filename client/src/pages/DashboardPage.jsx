@@ -1,5 +1,6 @@
 import {
   CalendarCheck,
+  Check,
   HeartPulse,
   ShieldCheck,
   UserRoundCog,
@@ -8,6 +9,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import CheckupDashboardSection from "../components/CheckupDashboardSection";
 import { useAuth } from "../contexts/AuthContext";
+import { isMemberDashboardOnboardingDismissedSession } from "../lib/memberDashboardOnboarding";
 import {
   employerOnboardingSteps,
   employerQuickActions,
@@ -23,6 +25,13 @@ const iconMap = {
 };
 
 const actionTones = ["mint", "sky", "amber", "violet"];
+
+function memberProfileAgeComplete(age) {
+  const s = String(age ?? "").trim();
+  if (!s) return false;
+  const n = Number(s);
+  return !Number.isNaN(n) && n >= 0 && n <= 130;
+}
 
 function MemberBenefitsSummaryCard() {
   const { benefitDashboardSummary, benefitContextDescription, effectiveInsurers } = useAuth();
@@ -95,7 +104,7 @@ function EmployerProgramSummaryCard() {
   );
 }
 
-function OnboardingRibbon({ steps }) {
+function OnboardingRibbon({ steps, stepComplete }) {
   const navigate = useNavigate();
   return (
     <section className="onboarding-vibe onboarding-vibe--beside-benefits" aria-labelledby="dash-onboard-heading">
@@ -106,18 +115,31 @@ function OnboardingRibbon({ steps }) {
         <p>Tap a step to continue—two above, one stretched below.</p>
       </div>
       <div className="step-chip-track step-chip-track--grid">
-        {steps.map((step, index) => (
-          <button
-            key={step.id}
-            type="button"
-            className={`step-chip step-chip--matte step-chip--matte-${index % 3} ${index === 2 ? "step-chip--span-bottom" : ""}`}
-            onClick={() => navigate(step.route)}
-          >
-            <span className="step-chip-num">{index + 1}</span>
-            <span className="step-chip-title">{step.title}</span>
-            <span className="step-chip-desc">{step.description}</span>
-          </button>
-        ))}
+        {steps.map((step, index) => {
+          const done = Boolean(stepComplete?.[index]);
+          return (
+            <button
+              key={step.id}
+              type="button"
+              className={`step-chip step-chip--matte step-chip--matte-${index % 3} ${index === 2 ? "step-chip--span-bottom" : ""} ${done ? "step-chip--complete" : ""}`}
+              onClick={() => navigate(step.route)}
+              aria-label={`${step.title}${done ? " — completed" : ""}`}
+            >
+              <span className="step-chip-topline">
+                <span className={`step-chip-num ${done ? "step-chip-num--complete" : ""}`}>
+                  {done ? <Check size={18} strokeWidth={2.75} aria-hidden /> : index + 1}
+                </span>
+                {done ? (
+                  <span className="step-chip-done-label" aria-hidden>
+                    Done
+                  </span>
+                ) : null}
+              </span>
+              <span className="step-chip-title">{step.title}</span>
+              <span className="step-chip-desc">{step.description}</span>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
@@ -192,8 +214,17 @@ function NewsFeed({ employerMode }) {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, healthProfile } = useAuth();
   const isEmployer = user?.accountType === "employer";
+  const sessionDismissed = !isEmployer && isMemberDashboardOnboardingDismissedSession();
+  const memberOnboardingDismissed =
+    !isEmployer &&
+    (sessionDismissed || Boolean(healthProfile.dashboardOnboardingDismissed));
+  const memberStepComplete = [
+    memberProfileAgeComplete(healthProfile.age),
+    Boolean(healthProfile.onboardingCalendarConnected),
+    false,
+  ];
 
   return (
     <div className="page-flow dashboard-flow">
@@ -207,9 +238,15 @@ export default function DashboardPage() {
         </p>
       </header>
 
-      <div className="dashboard-benefits-onboard">
+      <div
+        className={`dashboard-benefits-onboard${memberOnboardingDismissed ? " dashboard-benefits-onboard--full" : ""}`}
+      >
         {isEmployer ? <EmployerProgramSummaryCard /> : <MemberBenefitsSummaryCard />}
-        <OnboardingRibbon steps={isEmployer ? employerOnboardingSteps : onboardingSteps} />
+        {isEmployer ? (
+          <OnboardingRibbon steps={employerOnboardingSteps} />
+        ) : memberOnboardingDismissed ? null : (
+          <OnboardingRibbon steps={onboardingSteps} stepComplete={memberStepComplete} />
+        )}
       </div>
 
       <QuickActionsVivid items={isEmployer ? employerQuickActions : quickActions} />

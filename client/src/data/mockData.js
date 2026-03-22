@@ -19,7 +19,7 @@ export const onboardingSteps = [
   {
     id: "profile",
     title: "Complete Health Profile",
-    description: "Add age, occupation, medical history, allergies, and clinics you care about.",
+    description: "Add your age in Health Profile to unlock step 1 (you can add more detail anytime).",
     route: "/health-profile",
   },
   {

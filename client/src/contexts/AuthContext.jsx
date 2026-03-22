@@ -27,6 +27,7 @@ import {
   mergeSessionMetaViewsForClient,
   normalizeSessionMeta,
 } from "../lib/sessionMetaModel";
+import { clearMemberDashboardOnboardingSession } from "../lib/memberDashboardOnboarding";
 
 const USE_FIREBASE = isFirebaseConfigured();
 
@@ -227,13 +228,67 @@ function stripUid(profile) {
   return rest;
 }
 
+function slugKeyPart(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 32);
+}
+
+/** Stable ids so list remove/filter works for legacy rows without `id`. */
+function normalizeMedicalHistory(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((e, i) => {
+      if (!e || typeof e !== "object") return null;
+      const title = String(e.title || "").trim();
+      const date = String(e.date || "").trim();
+      const notes = String(e.notes || "").trim();
+      if (!title && !date && !notes) return null;
+      const id =
+        typeof e.id === "string" && e.id
+          ? e.id
+          : `mh-${i}-${slugKeyPart(date)}-${slugKeyPart(title)}`;
+      return { id, title, date, notes };
+    })
+    .filter(Boolean);
+}
+
+function normalizeAllergies(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((e, i) => {
+      if (!e || typeof e !== "object") return null;
+      const name = String(e.name || "").trim();
+      if (!name) return null;
+      const severity = e.severity || "Low";
+      const id =
+        typeof e.id === "string" && e.id ? e.id : `al-${i}-${slugKeyPart(name)}`;
+      return { id, name, severity };
+    })
+    .filter(Boolean);
+}
+
+function normalizeFavoriteClinics(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((c, i) => {
+      if (!c || typeof c !== "object") return null;
+      const name = String(c.name || "").trim();
+      if (!name) return null;
+      const id = typeof c.id === "string" && c.id ? c.id : `fc-${i}-${slugKeyPart(name)}`;
+      return { ...c, id, name, type: c.type || "Clinic" };
+    })
+    .filter(Boolean);
+}
+
 function normalizeProfile(rawProfile) {
-  const medicalHistory = Array.isArray(rawProfile?.medicalHistory) ? rawProfile.medicalHistory : [];
-  const allergies = Array.isArray(rawProfile?.allergies) ? rawProfile.allergies : [];
-  const favoriteClinics = Array.isArray(rawProfile?.favoriteClinics) ? rawProfile.favoriteClinics : [];
+  const medicalHistory = normalizeMedicalHistory(rawProfile?.medicalHistory);
+  const allergies = normalizeAllergies(rawProfile?.allergies);
+  const favoriteClinics = normalizeFavoriteClinics(rawProfile?.favoriteClinics);
 
   return {
-    age: rawProfile?.age || "",
+    age: rawProfile?.age ?? "",
     occupation: rawProfile?.occupation || "",
     calendarProvider: rawProfile?.calendarProvider || "Google",
     medicalHistory,
@@ -241,7 +296,28 @@ function normalizeProfile(rawProfile) {
     favoriteClinics,
     checkupSchedule: normalizeCheckupSchedule(rawProfile?.checkupSchedule),
     extraCareServices: normalizeExtraCareServices(rawProfile?.extraCareServices),
+    /** Member dashboard: hide onboarding strip after visiting Benefits. */
+    dashboardOnboardingDismissed: Boolean(rawProfile?.dashboardOnboardingDismissed),
+    /** Step 2: user chose a calendar provider in Health Profile. */
+    onboardingCalendarConnected: Boolean(rawProfile?.onboardingCalendarConnected),
   };
+}
+
+/**
+ * Merge Firestore health profile into existing client state when auth finishes loading.
+ * Prevents a slow/stale `loadUserDocument` from wiping in-flight edits (age, onboarding flags).
+ */
+function mergeHealthProfileFromAuthLoad(rawServer, prev) {
+  const serverNorm = normalizeProfile(rawServer || {});
+  const prevNorm = normalizeProfile(prev || {});
+  return normalizeProfile({
+    ...serverNorm,
+    ...prevNorm,
+    dashboardOnboardingDismissed:
+      Boolean(serverNorm.dashboardOnboardingDismissed || prevNorm.dashboardOnboardingDismissed),
+    onboardingCalendarConnected:
+      Boolean(serverNorm.onboardingCalendarConnected || prevNorm.onboardingCalendarConnected),
+  });
 }
 
 export function AuthProvider({ children }) {
@@ -275,6 +351,7 @@ export function AuthProvider({ children }) {
         if (!firebaseUser) {
           setUser(null);
           setFirebaseUid(null);
+          clearMemberDashboardOnboardingSession();
           setSessionMeta(emptySessionMeta());
           setHealthProfile(normalizeProfile({}));
           setHouseholdState({ enterpriseId: null, sharedBenefitRoleId: null, familyLinkCode: "" });
@@ -295,7 +372,7 @@ export function AuthProvider({ children }) {
           email: firebaseUser.email || data.profile?.email,
         });
         setUser(mergedProfile);
-        setHealthProfile(normalizeProfile(data.healthProfile || {}));
+        setHealthProfile((prev) => mergeHealthProfileFromAuthLoad(data.healthProfile, prev));
         setHouseholdState(
           data.household && typeof data.household === "object"
             ? {
@@ -1178,6 +1255,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setFirebaseUid(null);
     setShowOnboardingOverlay(false);
+    clearMemberDashboardOnboardingSession();
     if (!USE_FIREBASE) {
       localStorage.removeItem(USER_KEY);
     }
@@ -1186,7 +1264,8 @@ export function AuthProvider({ children }) {
   const updateProfile = useCallback(
     (updates) => {
       setHealthProfile((prev) => {
-        const next = normalizeProfile({ ...prev, ...updates });
+        const patch = typeof updates === "function" ? updates(prev) : updates;
+        const next = normalizeProfile({ ...prev, ...patch });
         if (!USE_FIREBASE) {
           localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
         } else if (firebaseUid) {

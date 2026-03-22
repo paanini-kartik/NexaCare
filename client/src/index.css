@@ -164,6 +164,13 @@ a { text-decoration: none; color: inherit; }
   gap: 1.5rem 2rem;
   align-items: stretch;
 }
+.dashboard-benefits-onboard--full {
+  grid-template-columns: 1fr;
+}
+.dashboard-benefits-onboard--full .dashboard-benefits-hero {
+  width: 100%;
+  max-width: none;
+}
 .hero-dot--pulse {
   display: inline-block;
   animation: pulse-glow 2.5s ease-in-out infinite;
@@ -225,6 +232,26 @@ a { text-decoration: none; color: inherit; }
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
   border-color: rgba(5, 150, 105, 0.28);
 }
+.step-chip--complete {
+  border-color: rgba(5, 150, 105, 0.55);
+  box-shadow: inset 3px 0 0 0 #047857, inset 0 0 0 1px rgba(5, 150, 105, 0.12);
+}
+.step-chip-topline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.step-chip-done-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #047857;
+  background: rgba(5, 150, 105, 0.12);
+  padding: 0.2rem 0.45rem;
+  border-radius: 0;
+}
 .step-chip-num {
   width: 1.75rem;
   height: 1.75rem;
@@ -235,6 +262,9 @@ a { text-decoration: none; color: inherit; }
   font-weight: 700;
   display: grid;
   place-items: center;
+}
+.step-chip-num--complete {
+  background: #047857;
 }
 .step-chip-title {
   font-family: "General Sans", Inter, sans-serif;
@@ -1733,6 +1763,17 @@ a { text-decoration: none; color: inherit; }
 }
 .profile-list-tight {
   gap: 0.4rem !important;
+}
+/* Cap height once there are many entries (~4 rows visible; rest scroll). */
+.profile-list-scroll {
+  max-height: 19rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.35rem;
+  scrollbar-gutter: stable;
+  border-radius: 0;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  padding: 0.35rem 0.35rem 0.35rem 0.5rem;
 }
 .profile-list-flat {
   background: rgba(248, 250, 252, 0.85) !important;

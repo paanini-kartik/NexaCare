@@ -1,12 +1,23 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { markMemberDashboardOnboardingDismissedSession } from "../lib/memberDashboardOnboarding";
 
 function currency(amount) {
   return `$${amount.toLocaleString()}`;
 }
 
 export default function BenefitsPage() {
-  const { effectiveInsurers, benefitContextDescription } = useAuth();
+  const { effectiveInsurers, benefitContextDescription, user, healthProfile, updateProfile } = useAuth();
+
+  /** Visiting Benefits (members) dismisses the dashboard onboarding strip. */
+  useEffect(() => {
+    if (user?.accountType === "employer") return;
+    // Immediate (no Firestore round-trip) so returning to Dashboard hides the strip right away.
+    markMemberDashboardOnboardingDismissedSession();
+    if (healthProfile.dashboardOnboardingDismissed) return;
+    updateProfile({ dashboardOnboardingDismissed: true });
+  }, [user?.accountType, healthProfile.dashboardOnboardingDismissed, updateProfile]);
 
   if (!effectiveInsurers.length) {
     return (
