@@ -164,6 +164,39 @@ const TOOLS = [
     },
   },
   {
+    name: "remove_benefit_provider",
+    description: "Remove a personal benefit provider by name. Use 'all' to remove all providers.",
+    input_schema: {
+      type: "object",
+      required: ["providerName"],
+      properties: {
+        providerName: { type: "string", description: "Provider name to remove, or 'all' to remove everything" },
+      },
+    },
+  },
+  {
+    name: "remove_medical_event",
+    description: "Remove a medical history event by title",
+    input_schema: {
+      type: "object",
+      required: ["title"],
+      properties: {
+        title: { type: "string", description: "Title of the medical event to remove" },
+      },
+    },
+  },
+  {
+    name: "remove_favorite_clinic",
+    description: "Remove a clinic from the user's favorites by name",
+    input_schema: {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", description: "Name of the clinic to remove" },
+      },
+    },
+  },
+  {
     name: "add_favorite_clinic",
     description: "Add a clinic to the user's favorite clinics list in their health profile",
     input_schema: {
@@ -237,8 +270,8 @@ You are a fully capable health agent. You can control the entire dashboard throu
 Tools available:
 - READ: get_user_profile, get_benefits, get_appointments, get_health_profile, find_clinics
 - BOOK/CANCEL: book_appointment, cancel_appointment
-- UPDATE PROFILE: update_profile (age, occupation), add_medical_event, add_allergy, remove_allergy, set_checkup_date, add_favorite_clinic
-- BENEFITS: add_benefit_provider, update_benefit_usage, apply_employer_key
+- UPDATE PROFILE: update_profile, add_medical_event, remove_medical_event, add_allergy, remove_allergy, set_checkup_date, add_favorite_clinic, remove_favorite_clinic
+- BENEFITS: add_benefit_provider, remove_benefit_provider (use "all" to wipe everything), update_benefit_usage, apply_employer_key
 - NAVIGATE: navigate_to (dashboard, health-profile, health-compass, benefits, settings, emergency)
 - UI: show_notification
 
@@ -545,6 +578,39 @@ export default function ChatbotWidget({
         const existing = authUser?.manualBenefitProviders ?? [];
         updatePersonalManualProviders([...existing, newProvider]);
         return JSON.stringify({ success: true, provider: newProvider });
+      }
+
+      case "remove_benefit_provider": {
+        const { providerName } = toolInput;
+        const existing = authUser?.manualBenefitProviders ?? [];
+        const filtered = providerName.toLowerCase() === "all"
+          ? []
+          : existing.filter(
+              (p) => !String(p.name ?? "").toLowerCase().includes(providerName.toLowerCase())
+            );
+        updatePersonalManualProviders(filtered);
+        const removed = existing.length - filtered.length;
+        return JSON.stringify({ success: true, removed, remaining: filtered.length });
+      }
+
+      case "remove_medical_event": {
+        const { title } = toolInput;
+        const existing = healthProfile?.medicalHistory ?? [];
+        const filtered = existing.filter(
+          (e) => !String(e.title ?? "").toLowerCase().includes(title.toLowerCase())
+        );
+        updateProfile({ medicalHistory: filtered });
+        return JSON.stringify({ success: true, removed: title });
+      }
+
+      case "remove_favorite_clinic": {
+        const { name } = toolInput;
+        const existing = healthProfile?.favoriteClinics ?? [];
+        const filtered = existing.filter(
+          (c) => !String(c.name ?? "").toLowerCase().includes(name.toLowerCase())
+        );
+        updateProfile({ favoriteClinics: filtered });
+        return JSON.stringify({ success: true, removed: name });
       }
 
       case "add_favorite_clinic": {
