@@ -14,7 +14,7 @@ export default function OnboardingOverlay() {
       <section className="overlay-card contained">
         <div className="overlay-head">
           <h2>
-            <Rocket size={18} /> Quick Onboarding
+            <Rocket size={18} /> Welcome
           </h2>
           <button className="ghost-btn" type="button" onClick={dismissOnboardingOverlay}>
             Close

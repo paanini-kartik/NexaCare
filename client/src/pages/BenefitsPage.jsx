@@ -34,14 +34,14 @@ export default function BenefitsPage() {
         <header className="page-hero page-hero--alive">
           <h1>Benefits</h1>
           <p>
-            No benefit plans are linked yet. Add an <strong>employer invite key</strong>, set up your organization in{" "}
-            <Link to="/employer">Employer Hub</Link>, or add <strong>manual providers</strong> in{" "}
-            <Link to="/settings">Settings</Link>. Everything you see here will come from what you configure.
+            Connect a plan to see your coverage here. Use your <strong>work invite code</strong> in{" "}
+            <Link to="/settings">Settings</Link>, or—if you manage benefits for a company—set things up in{" "}
+            <Link to="/employer">Employer hub</Link>.
           </p>
         </header>
         <section className="contained" style={{ marginTop: "1.5rem" }}>
           <p className="page-section-lead">
-            When at least one schedule exists, category totals and per-provider blocks will appear on this page.
+            Once a plan is linked, you’ll see totals by category and a breakdown for each carrier.
           </p>
         </section>
       </div>
@@ -74,22 +74,22 @@ export default function BenefitsPage() {
       <header className="page-hero page-hero--alive">
         <h1>Benefits</h1>
         <p>
-          Your plans in one view. Schedules start at <strong>$0 used</strong>; work benefits fill in when you apply an
-          employer key, and you can add benefit providers in{" "}
-          <Link to="/settings">Settings</Link> (family owners and contributors share one provider list for the whole family).
+          Annual limits, what you’ve spent, and what’s left—by category and by plan. Usage starts at <strong>$0</strong> until
+          you or your employer updates it. Family accounts share one provider list; manage it in{" "}
+          <Link to="/settings">Settings</Link>.
           {benefitContextDescription ? (
             <>
               {" "}
-              <strong>Active sources:</strong> {benefitContextDescription}.
+              <strong>Connected:</strong> {benefitContextDescription}.
             </>
           ) : null}
         </p>
       </header>
 
       <section className="page-section">
-        <h2 className="title-vibe">Synthesized across carriers</h2>
+        <h2 className="title-vibe">Across your plans</h2>
         <p className="page-section-lead">
-          Category rows aggregate every active provider. Usage stays at $0 until you track spend elsewhere.
+          Combined view by category, no matter how many carriers you have.
         </p>
         <div className="contained">
           <div className="table-wrap">
@@ -129,8 +129,8 @@ export default function BenefitsPage() {
       <div className="page-divider" role="presentation" />
 
       <section className="page-section">
-        <h2 className="title-vibe">By provider</h2>
-        <p className="page-section-lead">Each block is a light frame around dense benefit rows—not a wall of identical cards.</p>
+        <h2 className="title-vibe">By carrier</h2>
+        <p className="page-section-lead">Each plan listed separately with its categories and balances.</p>
         <div className="provider-stack">
           {effectiveInsurers.map((insurer) => (
             <article key={insurer.id} className="provider-block contained">

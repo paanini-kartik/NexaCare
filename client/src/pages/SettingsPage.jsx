@@ -183,7 +183,7 @@ export default function SettingsPage() {
         setCalendarMsg("⚠️ " + (data.detail || "Could not get auth URL"));
       }
     } catch {
-      setCalendarMsg("⚠️ Backend unavailable — make sure the server is running");
+      setCalendarMsg("Calendar connection isn’t available right now. Try again in a few minutes.");
     }
   };
 
@@ -284,7 +284,7 @@ export default function SettingsPage() {
     e.preventDefault();
     setEmployerKeyMsg("");
     const res = await applyEmployerInviteKey(employerKeyInput);
-    setEmployerKeyMsg(res.ok ? "Employer assignment applied — your work role is locked." : res.error || "Invalid key");
+    setEmployerKeyMsg(res.ok ? "Your work benefits are now linked to this account." : res.error || "That code didn’t work. Double-check and try again.");
     if (res.ok) setEmployerKeyInput("");
   };
 
@@ -298,9 +298,8 @@ export default function SettingsPage() {
       <header className="page-hero page-hero--alive">
         <h1>Settings</h1>
         <p>
-          Profile first, then access and roles. Employer invite keys are created automatically for each job role; copy them
-          under <strong>Connections</strong>. Family owners and contributors share one benefit-provider list that applies to
-          everyone in the family.
+          Your name, who has access to your account, and how benefits are connected. Employer invite codes appear under{" "}
+          <strong>Connections</strong> when applicable. Families share one list of benefit providers.
         </p>
       </header>
 
@@ -322,7 +321,7 @@ export default function SettingsPage() {
       {tab === "profile" ? (
         <section className="contained settings-section">
           <h2 className="page-section-title">Profile</h2>
-          <p className="page-section-lead">Full name appears in the header and across the portal.</p>
+          <p className="page-section-lead">This is the name shown in your account.</p>
           <form className="settings-form" onSubmit={saveProfile}>
             <label className="form-field">
               Full name
@@ -344,9 +343,8 @@ export default function SettingsPage() {
           {isEmployer ? (
             <>
               <p className="page-section-lead">
-                Each <strong>job role</strong> gets an invite key automatically when the role is created (existing roles are
-                backfilled when you open Employer Hub). When someone enters a key, their work benefits match that role and{" "}
-                <strong>lock</strong>. Copy keys under <strong>Connections</strong>.
+                Each <strong>job role</strong> has an invite code. When someone enters it, their work benefits match that
+                role. Copy codes anytime under <strong>Connections</strong>.
               </p>
               {employerKeysForOrg.length ? (
                 <ul className="settings-key-items" style={{ marginTop: "0.75rem" }}>
@@ -360,7 +358,7 @@ export default function SettingsPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="page-section-lead">Open <strong>Employer Hub</strong> once to create keys for your roles.</p>
+                <p className="page-section-lead">Set up roles in <strong>Employer hub</strong> to generate codes.</p>
               )}
               <p className="page-section-lead" style={{ marginTop: "1.25rem" }}>
                 Manage rate tables in <strong>Employer Hub</strong>.
@@ -380,7 +378,7 @@ export default function SettingsPage() {
                 <div className="settings-family-grid">
                   <div className="contained settings-nested">
                     <h4 className="settings-mini-title">Create a family</h4>
-                    <p className="page-section-lead">Creates a join key and unlocks the Connections tab.</p>
+                    <p className="page-section-lead">You’ll get a code family members can use to join.</p>
                     <button className="primary-btn" type="button" onClick={onCreateFamily}>
                       Create family
                     </button>
@@ -501,8 +499,8 @@ export default function SettingsPage() {
                 <>
                   <h3 className="settings-subhead">Benefit providers (family)</h3>
                   <p className="page-section-lead">
-                    Everyone in this family sees the same providers—<strong>owners and contributors</strong> can add or edit
-                    them. Usage starts at <strong>$0</strong>. Employer plans from work keys still merge in automatically.
+                    The whole family sees these plans. <strong>Owners and contributors</strong> can add or edit them. Usage
+                    starts at <strong>$0</strong> until you update it. Work benefits from an employer code still apply on top.
                   </p>
                   {canEditFamilyManualProviders ? (
                     <div className="contained settings-nested" style={{ marginTop: "0.5rem" }}>
@@ -608,8 +606,8 @@ export default function SettingsPage() {
                 <>
                   <h3 className="settings-subhead">Benefit providers (personal)</h3>
                   <p className="page-section-lead">
-                    Use this when you are <strong>not</strong> on an employer-linked work plan. Everything starts at $0
-                    used.
+                    For plans you carry outside of a work-linked account. Balances start at <strong>$0</strong> until you
+                    record usage.
                   </p>
                   <div className="contained settings-nested" style={{ marginTop: "0.5rem" }}>
                     <div className="form-grid form-grid--inline" style={{ marginBottom: "1rem" }}>
@@ -681,8 +679,8 @@ export default function SettingsPage() {
                 <>
                   <h3 className="settings-subhead">Work positions</h3>
                   <p className="page-section-lead">
-                    Employer invite keys you apply show up here. You can hold multiple positions; totals combine each
-                    distinct work plan once. Removing a position unlinks that employer from your benefits.
+                    Jobs you’ve linked with an employer code appear here. You can have more than one; each plan counts once
+                    toward your totals. Remove a row to unlink that employer.
                   </p>
                   {(user?.workAssignments || []).length ? (
                     <ul className="settings-key-items" style={{ marginTop: "0.5rem" }}>
@@ -767,7 +765,8 @@ export default function SettingsPage() {
         <section className="contained settings-section">
           <h2 className="page-section-title">Integrations</h2>
           <p className="page-section-lead">
-            Connect external services. When connected, appointments booked through NexaCare are added automatically.
+            Link the tools you already use. When Google Calendar is connected, new appointments can appear there
+            automatically.
           </p>
 
           <div className="contained settings-nested" style={{ marginTop: "1rem" }}>
@@ -805,7 +804,7 @@ export default function SettingsPage() {
       {tab === "connections" && showConnectionsTab ? (
         <section className="contained settings-section">
           <h2 className="page-section-title">Connections</h2>
-          <p className="page-section-lead">Keys you have generated. Share these securely with intended recipients only.</p>
+          <p className="page-section-lead">Codes you can share with employees or family—treat them like passwords.</p>
 
           {isEmployer ? (
             <div className="settings-key-list">
@@ -835,9 +834,7 @@ export default function SettingsPage() {
           ) : null}
 
           {!isEmployer && !(isMember && isOwner && currentFamily) ? (
-            <p className="page-section-lead">
-              Keys you create (employer invites or family creation) will be listed here.
-            </p>
+            <p className="page-section-lead">Employer and family codes you’re allowed to copy will show up here.</p>
           ) : null}
         </section>
       ) : null}

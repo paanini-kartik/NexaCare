@@ -81,22 +81,14 @@ export default function AuthPage() {
       <div className="auth-panel contained auth-contained">
         <div className="auth-top-row">
           <Link className="ghost-btn" to="/landing">
-            Back to NexaCare overview
+            Back to home
           </Link>
         </div>
-        <div className="auth-header">
-          <span className="status-dot" />
-          <p>
-            {import.meta.env.VITE_FIREBASE_API_KEY
-              ? "Firebase Auth + Firestore (configure rules in production)"
-              : "Local browser auth (no Firebase env — data stays in this browser only)"}
-          </p>
-        </div>
-        <h1>{isSignup ? "Create account" : "Log in"}</h1>
+        <h1>{isSignup ? "Create your account" : "Log in"}</h1>
         <p>
           {isSignup
-            ? "Anyone can join NexaCare. Use one choice below only if you will manage benefit roles for a firm; otherwise leave it on No and set family or employee access later in Settings."
-            : "Welcome back. Open Settings anytime to connect as a family member or employee."}
+            ? "Create an account to manage your health information, benefits, and care in one place."
+            : "Welcome back."}
         </p>
 
         <form className="auth-form" onSubmit={onSubmit}>
@@ -113,11 +105,11 @@ export default function AuthPage() {
 
               <div className="auth-employer-block">
                 <span className="auth-employer-label" id="employer-toggle-label">
-                  Firm role manager (employer)?
+                  Are you setting up benefits for a company?
                 </span>
                 <p className="auth-hint" style={{ marginTop: 0 }}>
-                  <strong>Yes</strong> — you administer benefit roles for your organization (Employer Hub).{" "}
-                  <strong>No</strong> — you use the app like any member; switch family vs employee in Settings.
+                  <strong>Yes</strong> if you’ll configure job roles and coverage for employees.{" "}
+                  <strong>No</strong> for a personal or family account—you can add work benefits later in Settings.
                 </p>
                 <div
                   className="employer-yesno"
