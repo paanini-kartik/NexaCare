@@ -90,14 +90,19 @@ const TOOLS = [
 function buildSystemPrompt(user, benefits, appointments) {
   const upcoming = appointments.filter((a) => a.status === "upcoming");
   const past     = appointments.filter((a) => a.status === "past");
-  return `You are a personal health assistant for ${user.name}, a ${user.age}-year-old ${user.occupation} based in ${user.location.city}.
 
-Current benefits:
+  const benefitText = benefits
+    ? `Current benefits:
 - Dental: $${benefits.dental.used} used of $${benefits.dental.total} ($${benefits.dental.total - benefits.dental.used} remaining)
 - Vision: $${benefits.vision.used} used of $${benefits.vision.total} ($${benefits.vision.total - benefits.vision.used} remaining)
-- Physiotherapy: $${benefits.physio.used} used of $${benefits.physio.total} ($${benefits.physio.total - benefits.physio.used} remaining)
+- Physiotherapy: $${benefits.physio.used} used of $${benefits.physio.total} ($${benefits.physio.total - benefits.physio.used} remaining)`
+    : "Benefits: This user has not configured any benefit plans yet. Tell them to go to Settings > Benefits to add their coverage.";
 
-Upcoming appointments: ${upcoming.length ? upcoming.map((a) => `${a.type} at ${a.clinicName} on ${a.date}`).join(", ") : "none"}
+  return `You are a personal health assistant for ${user.name}${user.age ? `, a ${user.age}-year-old` : ""}${user.occupation && user.occupation !== "patient" ? ` ${user.occupation}` : ""} based in ${user.location.city}.
+
+${benefitText}
+
+Upcoming appointments: ${upcoming.length ? upcoming.map((a) => `${a.type} at ${a.clinicName} on ${a.date}`).join(", ") : "none — user has no upcoming appointments"}
 Past appointments: ${past.length ? past.map((a) => `${a.type} at ${a.clinicName} on ${a.date}`).join(", ") : "none"}
 
 You have tools to read data, book appointments, update benefit usage, show notifications, and suggest_actions.
@@ -223,21 +228,9 @@ export default function ChatbotWidget({
     return null;
   })();
 
-  const appointments = propAppointments ?? [
-    { id: "apt_01", type: "Annual Dental Checkup",  clinicName: "Smile Dental Studio",    date: "2026-04-02T10:00:00Z", duration: 60,  status: "upcoming" },
-    { id: "apt_02", type: "Physiotherapy Session",  clinicName: "ActiveCare Physio",       date: "2026-04-10T14:30:00Z", duration: 45,  status: "upcoming" },
-    { id: "apt_03", type: "General Checkup",        clinicName: "Bayview Family Medicine", date: "2026-04-18T09:00:00Z", duration: 30,  status: "upcoming" },
-    { id: "apt_04", type: "Vision Test",            clinicName: "ClearView Optometry",     date: "2025-12-15T11:00:00Z", duration: 45,  status: "past"     },
-    { id: "apt_05", type: "Dental Cleaning",        clinicName: "Smile Dental Studio",     date: "2025-10-03T10:00:00Z", duration: 45,  status: "past"     },
-  ];
+  const appointments = propAppointments ?? [];
 
-  const [benefits, setBenefits] = useState(
-    realBenefits ?? propBenefits ?? {
-      dental: { total: 1500, used: 400 },
-      vision: { total: 600, used: 0 },
-      physio: { total: 900, used: 200 },
-    }
-  );
+  const [benefits, setBenefits] = useState(realBenefits ?? propBenefits ?? null);
 
   const clinics = propClinics ?? [
     { id: "c_01", name: "Smile Dental Studio", type: "dental", lat: 43.6545, lng: -79.3801 },
@@ -271,7 +264,9 @@ export default function ChatbotWidget({
         return JSON.stringify(realUser);
 
       case "get_benefits":
-        return JSON.stringify(benefits);
+        return benefits
+          ? JSON.stringify(benefits)
+          : JSON.stringify({ error: "No benefit plans configured. User should visit Settings to add coverage." });
 
       case "get_appointments":
         return JSON.stringify(appointments);

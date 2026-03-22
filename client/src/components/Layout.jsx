@@ -1,5 +1,5 @@
 import { Bell, Search, Settings } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import ChatbotWidget from "./ChatbotWidget";
@@ -18,9 +18,34 @@ const navItems = [
 
 export default function Layout() {
   const navigate = useNavigate();
-  const { user, logout, showOnboardingOverlay } = useAuth();
+  const { user, logout, showOnboardingOverlay, benefitDashboardSummary } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [notification, setNotification] = useState(null);
+
+  // Fetch real appointments from backend on login
+  useEffect(() => {
+    if (!user?.email) return;
+    fetch(`http://localhost:8000/api/appointments/${encodeURIComponent(user.email)}`)
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setAppointments(data); })
+      .catch(() => {});
+  }, [user?.email]);
+
+  // Map real benefits from AuthContext
+  const mappedBenefits = useMemo(() => {
+    const cats = benefitDashboardSummary?.categories;
+    if (!cats?.length) return null;
+    const find = (key) => cats.find((c) => c.key === key || c.label?.toLowerCase().includes(key));
+    const dental = find("dental");
+    const vision = find("vision");
+    const physio = find("physio") || find("physiotherapy");
+    if (!dental && !vision && !physio) return null;
+    return {
+      dental: { total: dental?.total ?? 0, used: dental?.used ?? 0 },
+      vision: { total: vision?.total ?? 0, used: vision?.used ?? 0 },
+      physio: { total: physio?.total ?? 0, used: physio?.used ?? 0 },
+    };
+  }, [benefitDashboardSummary]);
 
   const visibleNavItems = useMemo(
     () =>
@@ -112,6 +137,7 @@ export default function Layout() {
 
       <ChatbotWidget
         appointments={appointments}
+        benefits={mappedBenefits}
         onBookAppointment={handleBookAppointment}
         onShowNotification={handleShowNotification}
       />
