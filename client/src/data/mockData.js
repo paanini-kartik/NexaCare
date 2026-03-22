@@ -86,3 +86,31 @@ export const quickActions = [
   { id: "emergency", label: "Emergency Support", icon: "heart", active: true, route: "/emergency" },
   { id: "profile", label: "Update Profile", icon: "user", active: true, route: "/health-profile" },
 ];
+
+export const employerOnboardingSteps = [
+  {
+    id: "roles",
+    title: "Job roles & rates",
+    description: "Each role includes Optometry, Dental, and Physical—set limits workers receive through invite keys.",
+    route: "/employer",
+  },
+  {
+    id: "keys",
+    title: "Invite keys",
+    description: "Copy EMP- keys under Settings → Connections for employees to link their work plan.",
+    route: "/settings",
+  },
+  {
+    id: "compass",
+    title: "Health Compass",
+    description: "Browse nearby clinics when you need a reference map—optional for your organization.",
+    route: "/health-compass",
+  },
+];
+
+export const employerQuickActions = [
+  { id: "hub", label: "Employer Hub", icon: "user", active: true, route: "/employer" },
+  { id: "compass", label: "Health Compass", icon: "calendar", active: true, route: "/health-compass" },
+  { id: "emergency", label: "Emergency", icon: "heart", active: true, route: "/emergency" },
+  { id: "settings", label: "Settings", icon: "shield", active: true, route: "/settings" },
+];

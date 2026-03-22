@@ -1,6 +1,7 @@
+import { createRequiredEmployerCategories } from "../lib/employerBenefitTemplates";
+
 /**
- * New employer organizations start with one empty role template.
- * Benefit categories are added in Employer Hub (user-defined only).
+ * New employer organizations start with one role template including required benefit lines.
  */
 export function createEnterpriseFromSignup({ name, ownerEmail }) {
   const id = `ent-${Date.now().toString(36)}`;
@@ -12,7 +13,7 @@ export function createEnterpriseFromSignup({ name, ownerEmail }) {
       {
         id: `${id}-role-1`,
         name: "Primary role",
-        categories: [],
+        categories: createRequiredEmployerCategories(),
       },
     ],
   };

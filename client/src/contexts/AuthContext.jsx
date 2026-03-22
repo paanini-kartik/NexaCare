@@ -8,6 +8,7 @@ import { cloneManualProvidersForFamilyMerge } from "../lib/manualBenefitDefaults
 import { serializeMemberWorkAssignments } from "../lib/memberWorkShare";
 import { makeEmployerInviteKey, makeFamilyJoinKey } from "../lib/connectionKeys";
 import { getEffectiveInsurers, resolveBenefitSources, summarizeInsurersForDashboard } from "../lib/enterpriseBenefits";
+import { mergeWithRequiredEmployerCategories, summarizeEmployerProgramForWorkers } from "../lib/employerBenefitTemplates";
 import { getFirebaseAuth, getFirestoreDb, isFirebaseConfigured } from "../lib/firebase";
 import {
   ensureEmailLookup,
@@ -374,32 +375,6 @@ export function AuthProvider({ children }) {
     [firebaseUid]
   );
 
-  /** Family owners: household benefit schedule mirrors employer-key work assignment (no manual UI). */
-  useEffect(() => {
-    if (!user) return;
-    if (user.accountType !== "member" || user.familyRole !== "owner") return;
-
-    const hasWork = Boolean(user.enterpriseId && user.employeeRoleTemplateId);
-    const nextEnterprise = hasWork ? user.enterpriseId : null;
-    const nextRole = hasWork ? user.employeeRoleTemplateId : null;
-
-    if (household.enterpriseId === nextEnterprise && household.sharedBenefitRoleId === nextRole) return;
-
-    persistHousehold({
-      ...household,
-      enterpriseId: nextEnterprise,
-      sharedBenefitRoleId: nextRole,
-    });
-  }, [
-    user,
-    user?.accountType,
-    user?.familyRole,
-    user?.enterpriseId,
-    user?.employeeRoleTemplateId,
-    household,
-    persistHousehold,
-  ]);
-
   /** Publish this user's employer-linked jobs to the family doc so every member resolves the same plans. */
   useEffect(() => {
     if (!user?.familyId || user.accountType !== "member") return;
@@ -453,8 +428,8 @@ export function AuthProvider({ children }) {
   }, [user?.familyId, sessionMeta.families]);
 
   const benefitSources = useMemo(
-    () => resolveBenefitSources(user, household, myEnterprise, sessionMeta),
-    [user, household, myEnterprise, sessionMeta]
+    () => resolveBenefitSources(user, sessionMeta),
+    [user, sessionMeta]
   );
 
   const effectiveInsurers = useMemo(
@@ -463,6 +438,12 @@ export function AuthProvider({ children }) {
   );
 
   const benefitDashboardSummary = useMemo(() => summarizeInsurersForDashboard(effectiveInsurers), [effectiveInsurers]);
+
+  /** Aggregated annual limits across all job-role templates (employer accounts only). */
+  const employerProgramSummary = useMemo(() => {
+    if (user?.accountType !== "employer") return null;
+    return summarizeEmployerProgramForWorkers(myEnterprise);
+  }, [user?.accountType, myEnterprise]);
 
   const benefitContextDescription = useMemo(() => {
     if (!benefitSources.length) return "";
@@ -1070,12 +1051,10 @@ export function AuthProvider({ children }) {
     (enterpriseId, name) => {
       const newRoleId = `${enterpriseId}-role-${Date.now().toString(36)}`;
       updateEnterprise(enterpriseId, (e) => {
-        const first = e.employeeRoles[0]?.categories;
-        const base = Array.isArray(first) && first.length ? first.map((c) => ({ ...c, used: 0 })) : [];
         const newRole = {
           id: newRoleId,
           name: name.trim() || "New role",
-          categories: base,
+          categories: mergeWithRequiredEmployerCategories([]),
         };
         return { ...e, employeeRoles: [...e.employeeRoles, newRole] };
       });
@@ -1086,7 +1065,7 @@ export function AuthProvider({ children }) {
 
   const updateEmployeeRoleCategories = useCallback(
     (enterpriseId, roleId, categories) => {
-      const normalized = categories.map((c) => ({ ...c, used: 0 }));
+      const normalized = mergeWithRequiredEmployerCategories(categories);
       updateEnterprise(enterpriseId, (e) => ({
         ...e,
         employeeRoles: e.employeeRoles.map((r) => (r.id === roleId ? { ...r, categories: normalized } : r)),
@@ -1237,6 +1216,7 @@ export function AuthProvider({ children }) {
       currentFamily,
       effectiveInsurers,
       benefitDashboardSummary,
+      employerProgramSummary,
       benefitContextDescription,
       login,
       logout,
@@ -1277,6 +1257,7 @@ export function AuthProvider({ children }) {
       currentFamily,
       effectiveInsurers,
       benefitDashboardSummary,
+      employerProgramSummary,
       benefitContextDescription,
       login,
       logout,
