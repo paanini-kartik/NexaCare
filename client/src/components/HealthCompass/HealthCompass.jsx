@@ -5,6 +5,7 @@ import L from "leaflet";
 import { Clock, MapPin, Phone, Globe, Star, Navigation } from "lucide-react";
 import { clinicLocations } from "../../data/mockData";
 import { apiFetch } from "../../lib/api";
+import { localDateAndTimeToIsoUtc } from "../../lib/datetime";
 import { useAuth } from "../../contexts/AuthContext";
 
 
@@ -370,9 +371,9 @@ export default function HealthCompass() {
                     userName: user?.fullName || "Patient",
                     clinicName: selectedClinic.name,
                     type: selectedClinic.type || "Appointment",
-                    date: `${apptDate}T${apptTime}:00`,
-                    duration: 45
-                  })
+                    date: localDateAndTimeToIsoUtc(apptDate, apptTime),
+                    duration: 45,
+                  }),
 
                 });
                 const data = await res.json();

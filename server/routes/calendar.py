@@ -196,21 +196,16 @@ def add_calendar_event(body: dict):
     if not creds:
         return {"success": False, "reason": "User has not connected Google Calendar"}
 
-    # Parse ISO 8601 start time and localize to America/Toronto
-    tz = ZoneInfo("America/Toronto")
+    # Parse ISO 8601: prefer offset/Z from client (correct instant). Legacy naive strings
+    # were historically interpreted as America/Toronto — keep that for old payloads only.
+    tz_legacy = ZoneInfo("America/Toronto")
     try:
-        print(f"DEBUG: Received date_str='{date_str}'")
-        parsed = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-        
-        # If naive, treat as local Toronto time (-04:00)
+        normalized = date_str.strip().replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
         if parsed.tzinfo is None:
-            local_dt = parsed.replace(tzinfo=tz)
+            start_dt = parsed.replace(tzinfo=tz_legacy).astimezone(timezone.utc)
         else:
-            local_dt = parsed.astimezone(tz)
-        
-        # Shift to UTC for absolute safety
-        start_dt = local_dt.astimezone(timezone.utc)
-        print(f"DEBUG: Localized={local_dt.isoformat()}, UTC={start_dt.isoformat()}")
+            start_dt = parsed.astimezone(timezone.utc)
     except Exception as e:
         print(f"⚠️  Datetime parsing failed: {e}. Falling back to 1 week from now.")
         start_dt = datetime.now(timezone.utc) + timedelta(days=7)
