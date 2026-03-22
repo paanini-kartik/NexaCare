@@ -1008,18 +1008,25 @@ export default function ChatbotWidget({
 
   // ── PDF text extraction via pdfjs-dist ──────────────────────────────────
   async function extractPdfText(file) {
-    const pdfjsLib = await import("pdfjs-dist");
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
-    const buffer    = await file.arrayBuffer();
-    const pdf       = await pdfjsLib.getDocument({ data: buffer }).promise;
-    const pages     = await Promise.all(
-      Array.from({ length: pdf.numPages }, (_, i) =>
-        pdf.getPage(i + 1).then((p) => p.getTextContent()).then((tc) =>
-          tc.items.map((it) => it.str).join(" ")
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+      const buffer = await file.arrayBuffer();
+      const typedArray = new Uint8Array(buffer);
+      const loadingTask = pdfjsLib.getDocument({ data: typedArray });
+      const pdf = await loadingTask.promise;
+      const pages = await Promise.all(
+        Array.from({ length: pdf.numPages }, (_, i) =>
+          pdf.getPage(i + 1).then((p) => p.getTextContent()).then((tc) =>
+            tc.items.map((it) => it.str).join(" ")
+          )
         )
-      )
-    );
-    return pages.join("\n");
+      );
+      return pages.join("\n");
+    } catch (err) {
+      console.error("PDF extraction failed:", err);
+      throw new Error("Could not read the PDF. Make sure it's a valid, non-scanned PDF.");
+    }
   }
 
   // ── File upload handler ─────────────────────────────────────────────────
